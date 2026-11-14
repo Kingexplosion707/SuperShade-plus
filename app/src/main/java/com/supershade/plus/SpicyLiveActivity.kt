@@ -202,23 +202,35 @@ fun SpicyLiveActivityCard(
                         )
                     }
                 }
+                // Pin the player as the pop-up, kept up after the shade closes (and through song
+                // changes) until let go or swiped away.
+                val popupPinned by PopupPin.pinned.collectAsState()
+                val overlay = org.koin.compose.koinInject<com.supershade.service.HeadsUpOverlay>()
+                HeaderToggle(
+                    on = popupPinned,
+                    icon = if (popupPinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
+                    label = if (popupPinned) "Let the pop-up go" else "Pin as a pop-up",
+                    ink = ink,
+                ) {
+                    if (popupPinned) {
+                        overlay.unpinMedia()
+                    } else {
+                        val playing = shade.state.value.media
+                        if (playing != null) {
+                            overlay.pinMedia(playing, shade::mediaPlayPause, shade::mediaSkipNext, shade::mediaSkipPrevious)
+                            shade.close()
+                        }
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
                 // Float the lyrics out as Spicy Lyrics' overlay, or back.
                 val pinned = live.overlayOn
-                Box(
-                    Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(if (pinned) ink.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.14f))
-                        .clickable { SpicyLink.setOverlay(context, !pinned) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (pinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
-                        contentDescription = if (pinned) "Bring the lyrics back" else "Float the lyrics as an overlay",
-                        tint = if (pinned) Color.Black else Color.White,
-                        modifier = Modifier.size(19.dp),
-                    )
-                }
+                HeaderToggle(
+                    on = pinned,
+                    icon = Icons.Rounded.PictureInPictureAlt,
+                    label = if (pinned) "Bring the lyrics back" else "Float the lyrics as an overlay",
+                    ink = ink,
+                ) { SpicyLink.setOverlay(context, !pinned) }
             }
             Spacer(Modifier.height(14.dp))
             // A new song's lyrics (or "Finding the lyrics…" while they come) fade in over the last.
@@ -937,5 +949,19 @@ private fun SmallToggle(on: Boolean, icon: androidx.compose.ui.graphics.vector.I
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, label, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(16.dp))
+    }
+}
+
+@Composable
+private fun HeaderToggle(on: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, ink: Color, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(if (on) ink.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.14f))
+            .clickable(onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = label, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(19.dp))
     }
 }

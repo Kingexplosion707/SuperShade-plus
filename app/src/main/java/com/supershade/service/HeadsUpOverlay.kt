@@ -158,7 +158,24 @@ class HeadsUpOverlay(
     private var currentLifecycleOwner: HeadsUpLifecycleOwner? = null
     private var currentDismissToken: Any? = null
     /** Plus: the media pop-up was pinned, so it stays up (through song changes) until let go or swiped away. */
-    private var mediaPinned = false
+    private var mediaPinned: Boolean
+        get() = com.supershade.plus.PopupPin.value
+        set(v) { com.supershade.plus.PopupPin.value = v }
+
+    /** Plus: shows the media pop-up pinned (from the shade's live activity), or lets it go. */
+    fun pinMedia(media: MediaState, onPlayPause: () -> Unit, onSkipNext: () -> Unit, onSkipPrevious: () -> Unit) {
+        mediaPinned = true
+        showMedia(media, onPlayPause, onSkipNext, onSkipPrevious)
+    }
+
+    /** Plus: the media pop-up last shown, and whether the pop-up up now is it (not a notification). */
+    private var lastMedia: (() -> Unit)? = null
+    private var showingMedia = false
+
+    fun unpinMedia() {
+        mediaPinned = false
+        handler.post { dismissCurrent() }
+    }
 
     private val params = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
@@ -298,8 +315,11 @@ class HeadsUpOverlay(
         onSkipPrevious: () -> Unit,
         autoDismissMs: Long = 6_000L,
     ) {
+        // Plus: remembered so a pinned pop-up comes back after a notification's.
+        lastMedia = { showMedia(media, onPlayPause, onSkipNext, onSkipPrevious, autoDismissMs) }
         handler.post {
             dismissCurrent()
+            showingMedia = true
             val owner = HeadsUpLifecycleOwner()
             currentLifecycleOwner = owner
 
@@ -423,6 +443,10 @@ class HeadsUpOverlay(
     }
 
     private fun dismissCurrent() {
+        // Plus: a notification pop-up going while the media pop-up is pinned brings the pinned one back.
+        val bringBack = mediaPinned && !showingMedia && currentView != null
+        showingMedia = false
+        if (bringBack) lastMedia?.let { reshow -> handler.postDelayed({ if (mediaPinned && currentView == null) reshow() }, 300L) }
         currentView?.let { view ->
             try {
                 wm.removeView(view)
