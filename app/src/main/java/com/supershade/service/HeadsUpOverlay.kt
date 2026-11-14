@@ -12,6 +12,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.focus.focusRequester
 import com.supershade.plus.genieReveal
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -279,6 +280,7 @@ class HeadsUpOverlay(
                                     currentDismissToken = null
                                     handler.removeCallbacksAndMessages(null)
                                 },
+                                onTyping = ::setTyping,
                             )
                         }
                     }
@@ -443,7 +445,32 @@ class HeadsUpOverlay(
         dismissCurrent()
     }
 
+    /**
+     * Plus: the pop-up's window can't take the keyboard (it never takes focus, so it doesn't steal
+     * it from the app underneath); while a reply is being typed it takes focus, and gives it back
+     * once the pop-up goes.
+     */
+    private fun setTyping(on: Boolean) {
+        handler.post {
+            val view = currentView ?: return@post
+            params.flags = if (on) {
+                params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            } else {
+                params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            }
+            params.softInputMode = if (on) {
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+            } else {
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED
+            }
+            runCatching { wm.updateViewLayout(view, params) }
+        }
+    }
+
     private fun dismissCurrent() {
+        // Plus: the next pop-up starts unable to take focus again.
+        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED
         // Plus: a notification pop-up going while the media pop-up is pinned brings the pinned one back.
         val bringBack = mediaPinned && !showingMedia && currentView != null
         showingMedia = false
@@ -471,6 +498,7 @@ class HeadsUpOverlay(
         onDismiss: () -> Unit,
         onSnooze: (Long) -> Unit,
         onPauseAutoDismiss: () -> Unit,
+        onTyping: (Boolean) -> Unit = {},
     ) {
         val ctx = LocalContext.current
         val haptic = LocalHapticFeedback.current
@@ -927,6 +955,28 @@ class HeadsUpOverlay(
                         // Inline quick reply field
                         if (replyingAction != null) {
                             val action = replyingAction!!
+                            // Plus: the window takes focus so the keyboard comes up, on the field.
+                            val replyFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+                            val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+                            LaunchedEffect(action) {
+                                onTyping(true)
+                                kotlinx.coroutines.delay(120)
+                                runCatching { replyFocus.requestFocus() }
+                                keyboard?.show()
+                            }
+                            val sendReply: () -> Unit = sendReply@{
+                                val ri = action.replyInput ?: return@sendReply
+                                if (replyText.isBlank()) return@sendReply
+                                haptics.tileToggleOn()
+                                val intent = Intent().addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                                RemoteInput.addResultsToIntent(
+                                    arrayOf(ri), intent,
+                                    Bundle().apply { putCharSequence(ri.resultKey, replyText) }
+                                )
+                                com.supershade.plus.PendingLaunch.send(ctx, action.pendingIntent, intent)
+                                keyboard?.hide()
+                                onHide()
+                            }
                             val replyShape = when (theme) {
                                 is ShadeTheme.Cyberpunk -> ChamferedCornerShape(6.dp)
                                 is ShadeTheme.Nothing -> RoundedCornerShape(8.dp)
@@ -955,22 +1005,14 @@ class HeadsUpOverlay(
                                             ),
                                         )
                                     },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f).focusRequester(replyFocus),
                                     singleLine = true,
                                     shape = replyShape,
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
+                                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { sendReply() }),
                                 )
                                 IconButton(
-                                    onClick = {
-                                        haptics.tileToggleOn()
-                                        val ri = action.replyInput ?: return@IconButton
-                                        val intent = Intent().addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                                        RemoteInput.addResultsToIntent(
-                                            arrayOf(ri), intent,
-                                            Bundle().apply { putCharSequence(ri.resultKey, replyText) }
-                                        )
-                                        com.supershade.plus.PendingLaunch.send(ctx, action.pendingIntent, intent)
-                                        onHide()
-                                    },
+                                    onClick = { sendReply() },
                                     enabled = replyText.isNotBlank(),
                                 ) {
                                     Icon(
