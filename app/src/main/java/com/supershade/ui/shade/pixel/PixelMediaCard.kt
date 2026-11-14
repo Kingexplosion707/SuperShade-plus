@@ -88,6 +88,23 @@ fun PixelMediaCard(
     mediaCollapsed: Boolean = false,
     onToggleCollapse: () -> Unit = {},
 ) {
+    // Plus: Spicy Lyrics' live activity in place of the card while it sends this song, in every panel style.
+    com.supershade.plus.SpicyLiveActivityOr(media.title, media.artist, media.albumArt, onPlayPause, onSkipNext, onSkipPrevious, modifier) {
+        PixelMediaCardBody(media, onPlayPause, onSkipNext, onSkipPrevious, onSeek, modifier, mediaCollapsed, onToggleCollapse)
+    }
+}
+
+@Composable
+private fun PixelMediaCardBody(
+    media: MediaState,
+    onPlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+    mediaCollapsed: Boolean = false,
+    onToggleCollapse: () -> Unit = {},
+) {
     val context = LocalContext.current
     val haptics = LocalSuperHaptics.current ?: remember(context) { SuperHaptics(context) }
 

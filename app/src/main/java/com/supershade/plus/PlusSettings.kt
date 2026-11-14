@@ -19,6 +19,7 @@ object PlusSettings {
     const val ISLAND_GAP = "gesture_island_gap"
     const val ZONE_EXTRA_DP = "gesture_zone_extra_dp"
     const val STRICT_BLOCK = "strict_block_system_shade"
+    const val POPUP_BLUR = "popup_blur_percent"
 
     fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -41,6 +42,22 @@ object PlusSettings {
 
     /** Shizuku keeps the system's own shade from opening at all, re-asserting it and closing it if it slips open. */
     fun strictBlock(context: Context) = prefs(context).getBoolean(STRICT_BLOCK, false)
+
+    /**
+     * How much a notification or media pop-up blurs the screen behind it, in percent of the
+     * original strength. Android blurs the whole screen behind such a window, so it's off by default.
+     */
+    fun popupBlur(context: Context) = prefs(context).getInt(POPUP_BLUR, 0).coerceIn(0, 100)
+
+    /** Sets a pop-up window's blur from [popupBlur]; [maxRadiusPx] is the original's full strength. */
+    fun applyPopupBlur(context: Context, params: android.view.WindowManager.LayoutParams, maxRadiusPx: Int) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return
+        val radius = maxRadiusPx * popupBlur(context) / 100
+        @Suppress("DEPRECATION")
+        val flag = android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+        params.flags = if (radius > 0) params.flags or flag else params.flags and flag.inv()
+        params.blurBehindRadius = radius
+    }
 
     fun put(context: Context, key: String, value: Any) {
         prefs(context).edit().apply {
