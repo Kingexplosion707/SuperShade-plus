@@ -31,11 +31,11 @@ import androidx.media3.exoplayer.ExoPlayer
  * A silent looping video filling its box, cropped to it (the Canvas behind the live activity, the
  * animated cover in it). HLS (the animated covers) and plain MP4 (the Canvas) both play. It fades
  * in once its first frame is up, so the still underneath shows until then, and gives up quietly
- * ([onFailed]) when the stream won't play.
+ * ([onFailed]) when the stream won't play. It holds its frame while [playing] is false.
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun LoopingVideo(url: String, modifier: Modifier = Modifier, onFailed: () -> Unit = {}) {
+fun LoopingVideo(url: String, modifier: Modifier = Modifier, playing: Boolean = true, onFailed: () -> Unit = {}) {
     val context = LocalContext.current
     var aspect by remember(url) { mutableFloatStateOf(0f) }
     var shown by remember(url) { mutableStateOf(false) }
@@ -45,10 +45,12 @@ fun LoopingVideo(url: String, modifier: Modifier = Modifier, onFailed: () -> Uni
             repeatMode = Player.REPEAT_MODE_ONE
             videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
             setMediaItem(MediaItem.fromUri(url))
-            playWhenReady = true
+            playWhenReady = playing
             prepare()
         }
     }
+    // Holds still while the music is paused, so it isn't decoding video for nothing.
+    androidx.compose.runtime.LaunchedEffect(player, playing) { player.playWhenReady = playing }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(videoSize: VideoSize) {

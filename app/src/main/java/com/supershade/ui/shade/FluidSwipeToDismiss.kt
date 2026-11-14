@@ -56,6 +56,8 @@ class FluidSwipeState internal constructor(
 ) {
     internal val offset = Animatable(0f)
     internal var widthPx by mutableFloatStateOf(1f)
+    /** Plus: share of the width a release must pass to dismiss (Settings → SuperShade Plus). */
+    internal var commitFraction by mutableFloatStateOf(0.28f)
     internal var dragging by mutableStateOf(false)
     internal var dragOffset by mutableFloatStateOf(0f)
     /** Bumped at each gesture start, so a settle from an older gesture leaves the new one alone. */
@@ -65,7 +67,7 @@ class FluidSwipeState internal constructor(
     val offsetPx: Float get() = if (dragging) dragOffset else offset.value
 
     /** Distance after which a release commits the dismissal. */
-    val thresholdPx: Float get() = widthPx * 0.28f
+    val thresholdPx: Float get() = widthPx * commitFraction
 
     /** 0..1 progress towards the commit threshold-ish range, used for background effects. */
     val progress: Float get() = (abs(offsetPx) / (widthPx * 0.5f)).coerceIn(0f, 1f)
@@ -92,7 +94,17 @@ fun FluidSwipeToDismiss(
     val context = LocalContext.current
     val haptics: SuperHaptics = LocalSuperHaptics.current ?: remember(context) { SuperHaptics(context) }
     val density = LocalDensity.current
-    val flingVelocityPx = with(density) { 900.dp.toPx() }
+    // Plus: how far and how fast a swipe must go, and how far it must move sideways before it
+    // counts as a swipe at all, from the swipe sensitivity setting.
+    val sensitivity = remember(context) { com.supershade.plus.PlusSettings.swipeSensitivity(context) / 100f }
+    state.commitFraction = 0.55f - 0.35f * sensitivity
+    val flingVelocityPx = with(density) { (2600f - 1700f * sensitivity).dp.toPx() }
+    val baseConfig = androidx.compose.ui.platform.LocalViewConfiguration.current
+    val swipeConfig = remember(baseConfig, sensitivity) {
+        object : androidx.compose.ui.platform.ViewConfiguration by baseConfig {
+            override val touchSlop: Float = baseConfig.touchSlop * (2.6f - 1.6f * sensitivity)
+        }
+    }
     val currentOnDismissed by rememberUpdatedState(onDismissed)
     val allowStart by rememberUpdatedState(enableStartToEnd)
     val allowEnd by rememberUpdatedState(enableEndToStart)
@@ -131,6 +143,7 @@ fun FluidSwipeToDismiss(
         }
     }
 
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides swipeConfig) {
     Box(modifier = modifier) {
         Box(
             modifier = Modifier
@@ -177,7 +190,10 @@ fun FluidSwipeToDismiss(
                         },
                     )
                 },
-        ) { content() }
+        ) {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalViewConfiguration provides baseConfig) { content() }
+        }
+    }
     }
 
     // Never leave a card parked off its rest position with no finger on it.

@@ -17,6 +17,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -63,6 +65,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -99,6 +102,20 @@ fun SpicyLiveActivityCard(
     val art = remember(albumArt) { albumArt?.asImageBitmap() }
     val ink = Color(live.ink)
     val inkEnd = Color(live.inkEnd)
+    val media = org.koin.compose.koinInject<com.supershade.domain.media.MediaRepository>()
+    val shade = org.koin.compose.koinInject<com.supershade.viewmodel.ShadeViewModel>()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    // The cover and the song open the player (its now-playing screen where it has one).
+    val openPlayer: () -> Unit = {
+        if (openPlayerApp(context, media, live.player)) shade.close()
+    }
+    // A tapped lyric, or the progress bar, moves the song there.
+    val seek: (Long) -> Unit = { ms ->
+        val to = ms.coerceIn(0L, if (live.durationMs > 0) live.durationMs else Long.MAX_VALUE)
+        media.seekTo(to)
+        SpicyLink.seeked(to)
+        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+    }
     Box(
         modifier
             .fillMaxWidth()
@@ -121,7 +138,7 @@ fun SpicyLiveActivityCard(
             Image(art, null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().then(blurred).graphicsLayer { alpha = 0.85f })
         }
         if (canvas != null) {
-            LoopingVideo(canvas, Modifier.matchParentSize(), onFailed = { canvasFailed = true })
+            LoopingVideo(canvas, Modifier.matchParentSize(), playing = live.playing, onFailed = { canvasFailed = true })
         }
         // A veil for the words to read against, darker at the bottom, as the overlay's backdrop.
         val veil = (0.25f + live.backdropOpacity * 0.5f).coerceIn(0.25f, 0.8f)
@@ -138,13 +155,13 @@ fun SpicyLiveActivityCard(
         )
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.08f))) {
+                Box(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.08f)).clickable(onClickLabel = "Open the player", onClick = openPlayer)) {
                     if (art != null) Image(art, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     val motion = live.motionUrl?.takeIf { !motionFailed }
-                    if (motion != null) LoopingVideo(motion, Modifier.fillMaxSize(), onFailed = { motionFailed = true })
+                    if (motion != null) LoopingVideo(motion, Modifier.fillMaxSize(), playing = live.playing, onFailed = { motionFailed = true })
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).clickable(onClickLabel = "Open the player", onClick = openPlayer)) {
                     Text(
                         live.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -173,9 +190,9 @@ fun SpicyLiveActivityCard(
                 }
             }
             Spacer(Modifier.height(14.dp))
-            SpicyLyrics(live, ink, inkEnd, Modifier.fillMaxWidth().heightIn(min = LYRICS_HEIGHT))
+            SpicyLyrics(live, ink, inkEnd, seek, Modifier.fillMaxWidth().heightIn(min = LYRICS_HEIGHT))
             Spacer(Modifier.height(12.dp))
-            SpicyProgress(live, ink)
+            SpicyProgress(live, ink, seek)
             Row(
                 Modifier.fillMaxWidth().padding(top = 6.dp),
                 horizontalArrangement = Arrangement.Center,
@@ -205,20 +222,93 @@ private fun RoundButton(icon: androidx.compose.ui.graphics.vector.ImageVector, l
     }
 }
 
-/** The song's progress: a thin bar, running on between Spicy Lyrics' answers. */
+/**
+ * The song's progress: a thin bar, running on between Spicy Lyrics' answers, with the time gone
+ * and left. Tap or drag along it to move the song. It only ticks while the song plays.
+ */
 @Composable
-private fun SpicyProgress(live: SpicyLink.Live, ink: Color) {
+private fun SpicyProgress(live: SpicyLink.Live, ink: Color, onSeek: (Long) -> Unit) {
     var now by remember { mutableLongStateOf(live.position()) }
+    var dragging by remember { mutableStateOf<Float?>(null) }
     LaunchedEffect(live) {
-        while (true) {
-            now = live.position()
+        now = live.position()
+        while (live.playing) {
             kotlinx.coroutines.delay(500L)
+            now = live.position()
         }
     }
-    val fraction = if (live.durationMs > 0) (now.toFloat() / live.durationMs).coerceIn(0f, 1f) else 0f
-    Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.18f))) {
-        Box(Modifier.fillMaxWidth(fraction).height(4.dp).clip(CircleShape).background(Brush.horizontalGradient(listOf(Color.White, ink))))
+    val duration = live.durationMs
+    val fraction = dragging ?: if (duration > 0) (now.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    val currentOnSeek by androidx.compose.runtime.rememberUpdatedState(onSeek)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(18.dp)
+            .then(
+                if (duration <= 0) Modifier else Modifier
+                    .pointerInput(duration) {
+                        detectTapGestures { p -> currentOnSeek((p.x / size.width * duration).toLong()) }
+                    }
+                    .pointerInput(duration) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { p -> dragging = (p.x / size.width).coerceIn(0f, 1f) },
+                            onDragEnd = {
+                                dragging?.let { currentOnSeek((it * duration).toLong()) }
+                                dragging = null
+                            },
+                            onDragCancel = { dragging = null },
+                            onHorizontalDrag = { change, delta ->
+                                change.consume()
+                                dragging = ((dragging ?: 0f) + delta / size.width).coerceIn(0f, 1f)
+                            },
+                        )
+                    },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        val barHeight = if (dragging != null) 7.dp else 4.dp
+        Box(Modifier.fillMaxWidth().height(barHeight).clip(CircleShape).background(Color.White.copy(alpha = 0.18f))) {
+            Box(Modifier.fillMaxWidth(fraction).height(barHeight).clip(CircleShape).background(Brush.horizontalGradient(listOf(Color.White, ink))))
+        }
     }
+    if (duration > 0) {
+        val shown = dragging?.let { (it * duration).toLong() } ?: now.coerceIn(0L, duration)
+        Row(Modifier.fillMaxWidth()) {
+            Text(clockText(shown), color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+            Spacer(Modifier.weight(1f))
+            Text("-" + clockText(duration - shown), color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+        }
+    }
+}
+
+private fun clockText(ms: Long): String {
+    val total = (ms / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(total / 60, total % 60)
+}
+
+/**
+ * Opens the player: its own now-playing screen where its media session offers one, else the app.
+ * Returns whether something opened.
+ */
+private fun openPlayerApp(context: android.content.Context, media: com.supershade.domain.media.MediaRepository, player: String?): Boolean {
+    val session = media.sessionActivity()
+    if (session != null && (player == null || player == media.playerPackage())) {
+        val sent = runCatching {
+            if (Build.VERSION.SDK_INT >= 34) {
+                val options = android.app.ActivityOptions.makeBasic()
+                    .setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+                session.send(context, 0, null, null, null, null, options.toBundle())
+            } else {
+                session.send()
+            }
+        }.isSuccess
+        if (sent) return true
+    }
+    val pkg = player ?: media.playerPackage() ?: return false
+    val launch = context.packageManager.getLaunchIntentForPackage(pkg) ?: return false
+    return runCatching {
+        context.startActivity(launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED))
+    }.isSuccess
 }
 
 /**
@@ -230,7 +320,7 @@ private fun SpicyProgress(live: SpicyLink.Live, ink: Color) {
  * Line-synced lyrics fill a line at a time; unsynced ones simply show.
  */
 @Composable
-private fun SpicyLyrics(live: SpicyLink.Live, ink: Color, inkEnd: Color, modifier: Modifier) {
+private fun SpicyLyrics(live: SpicyLink.Live, ink: Color, inkEnd: Color, onSeek: (Long) -> Unit, modifier: Modifier) {
     val lyrics = live.lyrics
     if (lyrics == null || lyrics.lines.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {
@@ -254,11 +344,18 @@ private fun SpicyLyrics(live: SpicyLink.Live, ink: Color, inkEnd: Color, modifie
         }
         out
     }
-    // The clock, read while drawing; only a change of line recomposes.
+    // The clock, read while drawing; only a change of line recomposes. It runs each frame only
+    // while the song plays; paused, it holds still and nothing redraws.
     val clock = remember { mutableLongStateOf(live.position()) }
     LaunchedEffect(live) {
-        while (true) withFrameMillis { clock.longValue = live.position() }
+        clock.longValue = live.position()
+        while (live.playing) withFrameMillis { clock.longValue = live.position() }
     }
+    val tapSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    // Tapping a line moves the song to it (synced lyrics only).
+    fun seekTo(ms: Long): Modifier =
+        if (lyrics.isStatic) Modifier
+        else Modifier.clickable(interactionSource = tapSource, indication = null, onClickLabel = "Play from this line") { onSeek(ms) }
     val index by remember(groups) {
         derivedStateOf {
             if (lyrics.isStatic) 0 else groups.indexOfLast { it.startMs <= clock.longValue + LEAD_MS }.coerceAtLeast(0)
@@ -283,11 +380,12 @@ private fun SpicyLyrics(live: SpicyLink.Live, ink: Color, inkEnd: Color, modifie
                 SideText(
                     shownText(prev.lead, replaceWithTranslation, romanizeReplace), prev.lead.opposite,
                     Color.White.copy(alpha = 0.32f), (15 * scale), FontWeight.SemiBold, maxLines = 1,
+                    modifier = seekTo(prev.startMs),
                 )
                 Spacer(Modifier.height(5.dp))
             }
             val group = groups.getOrNull(i)
-            if (group != null) {
+            if (group != null) Column(Modifier.fillMaxWidth().then(seekTo(group.startMs))) {
                 val lead = group.lead
                 if (lyrics.isStatic) {
                     SideText(shownText(lead, replaceWithTranslation, romanizeReplace), lead.opposite, Color.White.copy(alpha = 0.9f), 21 * scale, FontWeight.Bold)
@@ -318,6 +416,7 @@ private fun SpicyLyrics(live: SpicyLink.Live, ink: Color, inkEnd: Color, modifie
                 SideText(
                     shownText(next.lead, replaceWithTranslation, romanizeReplace), next.lead.opposite,
                     Color.White.copy(alpha = 0.42f), 16 * scale, FontWeight.SemiBold, maxLines = 2,
+                    modifier = seekTo(next.startMs),
                 )
             }
         }
@@ -358,13 +457,13 @@ private fun Extras(line: SpicyLink.Line, replace: Boolean, romanizeUnder: Boolea
 
 /** Text on its singer's side: the right for a second singer, as on the lyrics screen. */
 @Composable
-private fun SideText(text: String, opposite: Boolean, color: Color, sizeSp: Float, weight: FontWeight, maxLines: Int = 3) {
+private fun SideText(text: String, opposite: Boolean, color: Color, sizeSp: Float, weight: FontWeight, maxLines: Int = 3, modifier: Modifier = Modifier) {
     Text(
         text,
         color = color, fontSize = sizeSp.sp, fontWeight = weight,
         maxLines = maxLines, overflow = TextOverflow.Ellipsis,
         textAlign = if (opposite) TextAlign.End else TextAlign.Start,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(modifier),
     )
 }
 

@@ -20,6 +20,7 @@ object PlusSettings {
     const val ZONE_EXTRA_DP = "gesture_zone_extra_dp"
     const val STRICT_BLOCK = "strict_block_system_shade"
     const val POPUP_BLUR = "popup_blur_percent"
+    const val SWIPE_SENSITIVITY = "swipe_dismiss_sensitivity"
 
     fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -58,6 +59,13 @@ object PlusSettings {
         params.flags = if (radius > 0) params.flags or flag else params.flags and flag.inv()
         params.blurBehindRadius = radius
     }
+
+    /**
+     * How readily a notification swipes away, 0 (a long, deliberate swipe) to 100 (the original's
+     * light touch). It sets how far a release must go, how fast a fling must be, and how far the
+     * finger must move sideways before it's a swipe and not a scroll.
+     */
+    fun swipeSensitivity(context: Context) = prefs(context).getInt(SWIPE_SENSITIVITY, 35).coerceIn(0, 100)
 
     fun put(context: Context, key: String, value: Any) {
         prefs(context).edit().apply {

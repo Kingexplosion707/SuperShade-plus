@@ -83,6 +83,19 @@ fun PlusSettingsSection(shizukuConnected: Boolean) {
                 PlusSettings.put(context, PlusSettings.ZONE_EXTRA_DP, it)
             }
             HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            var swipe by remember { mutableIntStateOf(PlusSettings.swipeSensitivity(context)) }
+            SliderRow(
+                "Swipe-to-dismiss sensitivity",
+                when {
+                    swipe < 25 -> "Low: a long, deliberate swipe dismisses"
+                    swipe < 60 -> "Medium: about half the card's width"
+                    else -> "High: a light flick dismisses"
+                },
+                swipe, 0..100,
+            ) {
+                swipe = it
+                PlusSettings.put(context, PlusSettings.SWIPE_SENSITIVITY, it)
+            }
             var blur by remember { mutableIntStateOf(PlusSettings.popupBlur(context)) }
             SliderRow(
                 "Pop-up background blur",
