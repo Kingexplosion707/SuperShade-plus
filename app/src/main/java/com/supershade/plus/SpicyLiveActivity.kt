@@ -131,14 +131,17 @@ fun SpicyLiveActivityCard(
     ) {
         // Behind it all: the Canvas, else the cover blurred.
         val canvas = live.canvasUrl?.takeIf { !canvasFailed }
-        if (art != null) {
-            val blurred = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                Modifier.blur(36.dp, BlurredEdgeTreatment.Rectangle)
-            } else Modifier
-            Image(art, null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().then(blurred).graphicsLayer { alpha = 0.85f })
+        // On a song change the old cover and Canvas fade into the new ones.
+        androidx.compose.animation.Crossfade(art, Modifier.matchParentSize(), animationSpec = tween(SONG_FADE_MS), label = "spicyBackdrop") { shownArt ->
+            if (shownArt != null) {
+                val blurred = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    Modifier.blur(36.dp, BlurredEdgeTreatment.Rectangle)
+                } else Modifier
+                Image(shownArt, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().then(blurred).graphicsLayer { alpha = 0.85f })
+            }
         }
-        if (canvas != null) {
-            LoopingVideo(canvas, Modifier.matchParentSize(), playing = live.playing, onFailed = { canvasFailed = true })
+        androidx.compose.animation.Crossfade(canvas, Modifier.matchParentSize(), animationSpec = tween(SONG_FADE_MS), label = "spicyCanvas") { url ->
+            if (url != null) LoopingVideo(url, Modifier.fillMaxSize(), playing = live.playing, onFailed = { canvasFailed = true })
         }
         // A veil for the words to read against, darker at the bottom, as the overlay's backdrop.
         val veil = (0.25f + live.backdropOpacity * 0.5f).coerceIn(0.25f, 0.8f)
@@ -156,20 +159,42 @@ fun SpicyLiveActivityCard(
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(54.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.08f)).clickable(onClickLabel = "Open the player", onClick = openPlayer)) {
-                    if (art != null) Image(art, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    // The new cover scales in over the old one.
+                    AnimatedContent(
+                        targetState = art,
+                        transitionSpec = {
+                            (fadeIn(tween(SONG_FADE_MS)) + androidx.compose.animation.scaleIn(spring(Spring.DampingRatioLowBouncy, Spring.StiffnessLow), initialScale = 0.86f))
+                                .togetherWith(fadeOut(tween(SONG_FADE_MS / 2)))
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        label = "spicyCover",
+                    ) { shownArt ->
+                        if (shownArt != null) Image(shownArt, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    }
                     val motion = live.motionUrl?.takeIf { !motionFailed }
                     if (motion != null) LoopingVideo(motion, Modifier.fillMaxSize(), playing = live.playing, onFailed = { motionFailed = true })
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f).clickable(onClickLabel = "Open the player", onClick = openPlayer)) {
-                    Text(
-                        live.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        live.artist, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
+                // The new song's name slides up into place.
+                AnimatedContent(
+                    targetState = live.title to live.artist,
+                    transitionSpec = {
+                        (slideInVertically(spring(Spring.DampingRatioLowBouncy, Spring.StiffnessLow)) { it / 2 } + fadeIn(tween(SONG_FADE_MS)))
+                            .togetherWith(slideOutVertically(tween(SONG_FADE_MS / 2)) { -it / 2 } + fadeOut(tween(SONG_FADE_MS / 2)))
+                    },
+                    modifier = Modifier.weight(1f).clickable(onClickLabel = "Open the player", onClick = openPlayer),
+                    label = "spicySong",
+                ) { (shownTitle, shownArtist) ->
+                    Column(Modifier.fillMaxWidth()) {
+                        Text(
+                            shownTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            shownArtist, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 // Float the lyrics out as Spicy Lyrics' overlay, or back.
                 val pinned = live.overlayOn
@@ -190,7 +215,16 @@ fun SpicyLiveActivityCard(
                 }
             }
             Spacer(Modifier.height(14.dp))
-            SpicyLyrics(live, ink, inkEnd, seek, Modifier.fillMaxWidth().heightIn(min = LYRICS_HEIGHT))
+            // A new song's lyrics (or "Finding the lyrics…" while they come) fade in over the last.
+            AnimatedContent(
+                targetState = live,
+                contentKey = { it.key },
+                transitionSpec = { fadeIn(tween(SONG_FADE_MS)).togetherWith(fadeOut(tween(SONG_FADE_MS / 2))) },
+                modifier = Modifier.fillMaxWidth(),
+                label = "spicySongLyrics",
+            ) { shown ->
+                SpicyLyrics(shown, ink, inkEnd, seek, Modifier.fillMaxWidth().heightIn(min = LYRICS_HEIGHT))
+            }
             Spacer(Modifier.height(12.dp))
             SpicyProgress(live, ink, seek)
             Row(
@@ -556,6 +590,12 @@ private fun SungLine(
 }
 
 private val LYRICS_HEIGHT = 136.dp
+private const val SONG_FADE_MS = 420
+/**
+ * After a song change, the live activity stays (with the new song's name and cover, finding its
+ * lyrics) this long while Spicy Lyrics catches up, instead of dropping to the plain card and back.
+ */
+private const val BRIDGE_MS = 6_000L
 /** A line counts as begun this long before its first word, so the change lands on time. */
 private const val LEAD_MS = 150L
 private const val DIM_ALPHA = 0.38f
@@ -579,9 +619,56 @@ fun SpicyLiveActivityOr(
     val live by SpicyLink.live.collectAsState()
     val current = live
     val enabled = remember { PlusSettings.spicyLiveActivity(context) }
-    if (enabled && current != null && current.fresh() && SpicyLink.matches(current, title, artist)) {
-        SpicyLiveActivityCard(current, albumArt, onPlayPause, onSkipNext, onSkipPrevious, modifier)
-    } else {
-        fallback()
+    val matches = enabled && current != null && current.fresh() && SpicyLink.matches(current, title, artist)
+    // When the live activity last showed this player's song, so a song change can bridge.
+    var lastMatchAt by remember { mutableLongStateOf(0L) }
+    var matchedSong by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var expired by remember { mutableStateOf(false) }
+    val now = android.os.SystemClock.elapsedRealtime()
+    if (matches) {
+        androidx.compose.runtime.SideEffect {
+            lastMatchAt = android.os.SystemClock.elapsedRealtime()
+            matchedSong = title to artist
+        }
+    }
+    val bridging = !matches && enabled && current != null && current.fresh() &&
+        lastMatchAt > 0L && now - lastMatchAt < BRIDGE_MS && !expired
+    LaunchedEffect(bridging, title, artist) {
+        expired = false
+        if (bridging) {
+            kotlinx.coroutines.delay((BRIDGE_MS - (android.os.SystemClock.elapsedRealtime() - lastMatchAt)).coerceAtLeast(0L))
+            expired = true
+        }
+    }
+    val shown: SpicyLink.Live? = when {
+        matches -> current
+        // Spicy Lyrics already moved to the next song and the player's card hasn't yet: show it.
+        bridging && current != null && matchedSong == (title to artist) -> current
+        // The new song, as the player has it, while Spicy Lyrics finds its lyrics.
+        bridging && current != null -> current.copy(
+            key = "pending:$title:$artist", title = title, artist = artist,
+            lyrics = null, state = "loading", canvasUrl = null, motionUrl = null,
+            positionMs = 0L, atElapsed = now, durationMs = 0L,
+        )
+        else -> null
+    }
+    val lastShown = remember { mutableStateOf<SpicyLink.Live?>(null) }
+    if (shown != null) lastShown.value = shown
+    // The live activity and the plain card fade into each other, never jump.
+    AnimatedContent(
+        targetState = shown != null,
+        transitionSpec = {
+            (fadeIn(tween(SONG_FADE_MS)) + androidx.compose.animation.scaleIn(tween(SONG_FADE_MS), initialScale = 0.97f))
+                .togetherWith(fadeOut(tween(SONG_FADE_MS / 2)))
+                .using(androidx.compose.animation.SizeTransform(clip = false))
+        },
+        label = "spicyOrPlain",
+    ) { isLive ->
+        val state = shown ?: lastShown.value
+        if (isLive && state != null) {
+            SpicyLiveActivityCard(state, albumArt, onPlayPause, onSkipNext, onSkipPrevious, modifier)
+        } else {
+            fallback()
+        }
     }
 }
