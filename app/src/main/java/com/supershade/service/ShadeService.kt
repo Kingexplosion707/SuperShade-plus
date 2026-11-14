@@ -116,6 +116,8 @@ class ShadeService : Service() {
         // Show peek cards for new notifications when the shade panel is closed.
         notificationRepo.newNotifications
             .onEach { notification ->
+                // Plus: buzz as the phone would (vibrate mode or sound on, never silent).
+                com.supershade.plus.NotificationBuzz.onNew(this, notification)
                 if (!shadeViewModel.state.value.isOpen) {
                     headsUpOverlay.show(notification)
                 }

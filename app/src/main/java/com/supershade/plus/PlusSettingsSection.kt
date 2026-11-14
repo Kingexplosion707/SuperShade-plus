@@ -142,6 +142,25 @@ fun PlusSettingsSection(shizukuConnected: Boolean) {
                 strict = it
                 PlusSettings.put(context, PlusSettings.STRICT_BLOCK, it)
             }
+            HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            var buzz by remember { mutableStateOf(PlusSettings.notificationVibrate(context)) }
+            SwitchRow(
+                "Vibrate for notifications",
+                "A short buzz when a notification arrives, in vibrate mode or with the sound on. Never in silent mode or Do Not Disturb.",
+                buzz,
+            ) {
+                buzz = it
+                PlusSettings.put(context, PlusSettings.NOTIFICATION_VIBRATE, it)
+            }
+            var genie by remember { mutableStateOf(PlusSettings.popupAnimation(context)) }
+            SwitchRow(
+                "Pop-ups come out of the camera",
+                "Notification and media pop-ups pour out from behind the camera, like a window coming out of the macOS Dock. Off: they slide down.",
+                genie,
+            ) {
+                genie = it
+                PlusSettings.put(context, PlusSettings.POPUP_ANIMATION, it)
+            }
         }
     }
 }

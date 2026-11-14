@@ -21,6 +21,8 @@ object PlusSettings {
     const val STRICT_BLOCK = "strict_block_system_shade"
     const val POPUP_BLUR = "popup_blur_percent"
     const val SWIPE_SENSITIVITY = "swipe_dismiss_sensitivity"
+    const val NOTIFICATION_VIBRATE = "notification_vibrate"
+    const val POPUP_ANIMATION = "popup_genie_animation"
 
     fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -66,6 +68,12 @@ object PlusSettings {
      * finger must move sideways before it's a swipe and not a scroll.
      */
     fun swipeSensitivity(context: Context) = prefs(context).getInt(SWIPE_SENSITIVITY, 35).coerceIn(0, 100)
+
+    /** A buzz for each new notification, in vibrate mode or with the sound on (never in silent). */
+    fun notificationVibrate(context: Context) = prefs(context).getBoolean(NOTIFICATION_VIBRATE, true)
+
+    /** Pop-ups come out from behind the camera (else they slide down as in the original). */
+    fun popupAnimation(context: Context) = prefs(context).getBoolean(POPUP_ANIMATION, true)
 
     fun put(context: Context, key: String, value: Any) {
         prefs(context).edit().apply {
