@@ -25,6 +25,9 @@
 
     <!-- Package visibility for ShizukuPlus and Shizuku managers -->
     <queries>
+        <!-- Plus: Spicy Lyrics Plus, whose lyrics show as a live activity in the shade. -->
+        <package android:name="com.behnoud.spicylyrics" />
+        <package android:name="com.behnoud.spicylyrics.debug" />
         <package android:name="af.shizuku.plus.api" />
         <package android:name="moe.shizuku.privileged.api" />
         <package android:name="moe.shizuku.manager" />

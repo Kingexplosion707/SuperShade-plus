@@ -15,7 +15,7 @@ class UpdateChecker {
 
     private companion object {
         const val RELEASES_API =
-            "https://api.github.com/repos/thejaustin/SuperShade/releases/latest"
+            "https://api.github.com/repos/Kingexplosion707/SuperShade-plus/releases/latest"
     }
 
     suspend fun check(currentVersion: String): UpdateInfo? = withContext(Dispatchers.IO) {

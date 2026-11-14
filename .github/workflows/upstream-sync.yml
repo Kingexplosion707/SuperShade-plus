@@ -1,0 +1,117 @@
+name: SuperShade updates
+
+# Once a week, brings the original SuperShade's new work (thejaustin/SuperShade) into main with
+# every Plus change kept, checks that it builds, and starts the Plus release. If the merge needs a
+# hand (conflicts, or it doesn't build), it opens an issue labelled upstream-sync and leaves main
+# alone. Every few days it also touches the shared signing key, so the Actions cache keeps it.
+
+on:
+  schedule:
+    - cron: '17 9 * * 1'     # Mondays: look for updates
+    - cron: '43 4 */3 * *'   # every three days: keep the signing key warm
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+concurrency:
+  group: upstream-sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Keep the shared signing key warm
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/plus-key
+          key: supershade-plus-keystore-v1
+
+      - uses: actions/checkout@v4
+        if: github.event.schedule != '43 4 */3 * *'
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Merge the original's new work
+        id: merge
+        if: github.event.schedule != '43 4 */3 * *'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/thejaustin/SuperShade.git
+          branch=$(git ls-remote --symref upstream HEAD | sed -nE 's#^ref: refs/heads/([^ \t]+).*#\1#p')
+          branch=${branch:-main}
+          git fetch --no-tags upstream "$branch"
+          if git merge-base --is-ancestor "upstream/$branch" HEAD; then
+            echo "status=current" >> "$GITHUB_OUTPUT"
+            echo "Already has everything from the original." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "upstream=$(git rev-parse --short "upstream/$branch")" >> "$GITHUB_OUTPUT"
+          if git merge --no-edit "upstream/$branch" -m "Bring in the original SuperShade ($(git rev-parse --short "upstream/$branch"))"; then
+            echo "status=merged" >> "$GITHUB_OUTPUT"
+          else
+            git diff --name-only --diff-filter=U > conflicts.txt
+            git merge --abort
+            echo "status=conflicts" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.merge.outputs.status == 'merged'
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.merge.outputs.status == 'merged'
+      - name: Check that it builds
+        id: build
+        if: steps.merge.outputs.status == 'merged'
+        continue-on-error: true
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon
+
+      # Pushes made with this workflow's token start no workflows, so the release is started by hand.
+      - name: Put it on main
+        if: steps.merge.outputs.status == 'merged' && steps.build.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push origin HEAD:main
+          gh workflow run plus-release.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "The original's work up to ${{ steps.merge.outputs.upstream }} is on main, with every Plus change kept; the release is on its way." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ask for a hand
+        if: steps.merge.outputs.status == 'conflicts' || (steps.merge.outputs.status == 'merged' && steps.build.outcome != 'success')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS: ${{ steps.merge.outputs.status }}
+          UPSTREAM: ${{ steps.merge.outputs.upstream }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create upstream-sync --repo "$GITHUB_REPOSITORY" --color FBCA04 \
+            --description "An update from the original SuperShade to merge by hand" 2> /dev/null || true
+          if [ "$STATUS" = conflicts ]; then
+            files=$(sed 's/.*/- `&`/' conflicts.txt)
+            body="Merging the original SuperShade (up to $UPSTREAM) into main ran into conflicts in:
+
+          $files
+
+          Merge \`thejaustin/SuperShade\` into main by hand, keeping the original's change **and** every Plus change (\`com.supershade.plus\` and the lines marked \`Plus:\`). ([Run]($RUN_URL))"
+          else
+            branch="upstream-sync/$UPSTREAM"
+            git push --force origin "HEAD:refs/heads/$branch"
+            body="The original SuperShade (up to $UPSTREAM) merged without conflicts, but the build failed ([run]($RUN_URL)), so main was left as it was. The merge is on the \`$branch\` branch: fix it there, keeping every Plus change, and open a pull request into main."
+          fi
+          title="SuperShade update $UPSTREAM needs a hand"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-sync --state open --json number,title \
+            --jq ".[] | select(.title == \"$title\") | .number" | awk 'NR == 1')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --label upstream-sync --body "$body"
+          fi

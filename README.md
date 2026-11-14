@@ -1,5 +1,12 @@
 # SuperShade
 
+> **SuperShade Plus** is a fork with extras:
+> - **Spicy Lyrics live activity**: with [Spicy Lyrics Plus](https://github.com/Kingexplosion707/Spicy-Lyrics-Android-Extra) installed, the media card becomes a live activity with word-synced lyrics in Spicy Lyrics' style, the animated album cover, and the Spotify Canvas playing behind it. Its pin floats the lyrics out as Spicy Lyrics' overlay (with that overlay's settings) and back.
+> - **Adjustable swipe zone**: set where along the top a swipe opens the shade, how deep that reaches, and a gap over the camera so a dynamic island stays tappable.
+> - **Strict block**: through Shizuku, the system's own shade is kept from opening at all.
+> - **Liquid Glass** (Appearance → Backdrop): glass cards over the blurred backdrop.
+> - Builds from `main` are published as releases signed with one shared key, so the in-app updater works, and the original SuperShade's new work is merged in once a week.
+
 [![GitHub Release](https://img.shields.io/github/v/release/thejaustin/SuperShade?style=flat-square&color=36BCF7&labelColor=1a1b27&label=Latest)](https://github.com/thejaustin/SuperShade/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/thejaustin/SuperShade/total?style=flat-square&color=3DDC84&labelColor=1a1b27&logo=android&label=Downloads)](https://github.com/thejaustin/SuperShade/releases)
 [![Stars](https://img.shields.io/github/stars/thejaustin/SuperShade?style=flat-square&color=FFD700&labelColor=1a1b27&logo=github&label=Stars)](https://github.com/thejaustin/SuperShade/stargazers)

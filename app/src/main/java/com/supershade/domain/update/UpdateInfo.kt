@@ -8,8 +8,16 @@ data class UpdateInfo(
     val releasePageUrl: String,
 ) {
     val isUpdateAvailable: Boolean
-        get() = parseVersion(latestVersion) > parseVersion(currentVersion)
+        get() {
+            val latest = parseVersion(latestVersion)
+            val current = parseVersion(currentVersion)
+            if (latest != current) return latest > current
+            // Plus: builds of the same version are told apart by their build number ("-plus.N").
+            return plusBuild(latestVersion) > plusBuild(currentVersion)
+        }
 }
+
+private fun plusBuild(v: String): Int = Regex("""plus\.(\d+)""").find(v)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
 private fun parseVersion(v: String): Triple<Int, Int, Int> {
     val clean = v.trimStart('v', 'V').substringBefore('-').substringBefore('+').trim()
