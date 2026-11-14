@@ -1086,7 +1086,7 @@ fun NotificationCard(
                                     if (action.replyInput != null) {
                                         replyingAction = action
                                     } else {
-                                        try { action.pendingIntent?.send() } catch (_: Exception) {}
+                                        com.supershade.plus.PendingLaunch.send(context, action.pendingIntent)
                                     }
                                 },
                                 interactionSource = actionInteraction,
@@ -1141,7 +1141,7 @@ fun NotificationCard(
                                     arrayOf(ri), intent,
                                     android.os.Bundle().apply { putCharSequence(ri.resultKey, replyText) }
                                 )
-                                try { action.pendingIntent?.send(context, 0, intent) } catch (_: Exception) {}
+                                com.supershade.plus.PendingLaunch.send(context, action.pendingIntent, intent)
                                 onReply?.invoke(notification, replyText)
                                 replyingAction = null
                             }

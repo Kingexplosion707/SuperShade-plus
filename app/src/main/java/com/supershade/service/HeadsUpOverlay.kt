@@ -157,6 +157,8 @@ class HeadsUpOverlay(
     private var currentView: ComposeView? = null
     private var currentLifecycleOwner: HeadsUpLifecycleOwner? = null
     private var currentDismissToken: Any? = null
+    /** Plus: the media pop-up was pinned, so it stays up (through song changes) until let go or swiped away. */
+    private var mediaPinned = false
 
     private val params = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
@@ -239,7 +241,9 @@ class HeadsUpOverlay(
                                 notification = notification,
                                 isAmoled = isAmoled,
                                 onTap = {
-                                    try { notification.contentIntent?.send() } catch (_: Exception) {}
+                                    if (com.supershade.plus.PendingLaunch.send(context, notification.contentIntent, fallbackPackage = notification.packageName)) {
+                                        notificationRepo?.autoCancelAfterLaunch(notification.key)
+                                    }
                                     handler.post { dismissCurrent() }
                                 },
                                 onHide = {
@@ -344,20 +348,47 @@ class HeadsUpOverlay(
                         LocalSuperHaptics provides superHaptics,
                     ) {
                         themeWrapper {
-                            AmbientMediaCard(
-                                media = media,
-                                isAmoled = isAmoled,
+                            val hide: () -> Unit = {
+                                mediaPinned = false
+                                handler.post { dismissCurrent() }
+                            }
+                            val pauseAutoDismiss: () -> Unit = {
+                                currentDismissToken = null
+                                handler.removeCallbacksAndMessages(null)
+                            }
+                            // Plus: Spicy Lyrics' live activity (Canvas, animated cover, lyrics) when it's sending this song.
+                            com.supershade.plus.SpicyPopupOr(
+                                title = media.title,
+                                artist = media.artist,
+                                albumArt = media.albumArt,
                                 onPlayPause = onPlayPause,
                                 onSkipNext = onSkipNext,
                                 onSkipPrevious = onSkipPrevious,
-                                onHide = {
-                                    handler.post { dismissCurrent() }
+                                onHide = hide,
+                                onTouch = pauseAutoDismiss,
+                                pinned = mediaPinned,
+                                onPin = { pin ->
+                                    mediaPinned = pin
+                                    if (pin) {
+                                        pauseAutoDismiss()
+                                    } else {
+                                        // Let go: it leaves a few seconds later, as an unpinned one does.
+                                        val letGo = Any()
+                                        currentDismissToken = letGo
+                                        handler.postDelayed({ if (currentDismissToken === letGo) dismissCurrent() }, 3_000L)
+                                    }
                                 },
-                                onPauseAutoDismiss = {
-                                    currentDismissToken = null
-                                    handler.removeCallbacksAndMessages(null)
-                                },
-                            )
+                            ) {
+                                AmbientMediaCard(
+                                    media = media,
+                                    isAmoled = isAmoled,
+                                    onPlayPause = onPlayPause,
+                                    onSkipNext = onSkipNext,
+                                    onSkipPrevious = onSkipPrevious,
+                                    onHide = hide,
+                                    onPauseAutoDismiss = pauseAutoDismiss,
+                                )
+                            }
                         }
                     }
                 }
@@ -378,9 +409,11 @@ class HeadsUpOverlay(
 
             val token = Any()
             currentDismissToken = token
-            handler.postDelayed({
-                if (currentDismissToken === token) dismissCurrent()
-            }, autoDismissMs)
+            if (!mediaPinned) {
+                handler.postDelayed({
+                    if (currentDismissToken === token) dismissCurrent()
+                }, autoDismissMs)
+            }
         }
     }
 
@@ -835,7 +868,7 @@ class HeadsUpOverlay(
                                             if (action.replyInput != null) {
                                                 replyingAction = action
                                             } else {
-                                                try { action.pendingIntent?.send() } catch (_: Exception) {}
+                                                com.supershade.plus.PendingLaunch.send(ctx, action.pendingIntent)
                                                 onHide()
                                             }
                                         },
@@ -908,7 +941,7 @@ class HeadsUpOverlay(
                                             arrayOf(ri), intent,
                                             Bundle().apply { putCharSequence(ri.resultKey, replyText) }
                                         )
-                                        try { action.pendingIntent?.send(ctx, 0, intent) } catch (_: Exception) {}
+                                        com.supershade.plus.PendingLaunch.send(ctx, action.pendingIntent, intent)
                                         onHide()
                                     },
                                     enabled = replyText.isNotBlank(),

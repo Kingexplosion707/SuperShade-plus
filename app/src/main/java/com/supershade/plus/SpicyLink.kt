@@ -141,6 +141,18 @@ object SpicyLink {
         }
     }
 
+    /**
+     * The media pop-up showed or went: ask Spicy Lyrics for this song while it shows, and let it
+     * stop after unless the shade is open (it also stops by itself when no one asks).
+     */
+    fun popup(context: Context, showing: Boolean) {
+        if (showing) {
+            if (PlusSettings.spicyLiveActivity(context)) send(context, Intent(ACTION_REQUEST))
+        } else if (!open) {
+            send(context, Intent(ACTION_STOP))
+        }
+    }
+
     private val reask: Runnable = object : Runnable {
         override fun run() {
             val context = app ?: return

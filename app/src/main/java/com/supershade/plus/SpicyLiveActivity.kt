@@ -17,6 +17,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -32,11 +34,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
@@ -670,5 +676,250 @@ fun SpicyLiveActivityOr(
         } else {
             fallback()
         }
+    }
+}
+
+/**
+ * The media pop-up that shows on a song change, as Spicy Lyrics' live activity when it's sending
+ * this song: the Canvas playing behind it (else the cover, blurred), the animated cover, the song,
+ * the controls, and the line being sung filling word by word with the next one under it. Else
+ * [fallback] (the plain pop-up). Spicy Lyrics is asked to follow while it shows, and told to stop
+ * after unless the shade is open. Swipe it up to hide it; the cover opens the player.
+ */
+@Composable
+fun SpicyPopupOr(
+    title: String,
+    artist: String,
+    albumArt: Bitmap?,
+    onPlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onHide: () -> Unit,
+    onTouch: () -> Unit,
+    pinned: Boolean = false,
+    onPin: (Boolean) -> Unit = {},
+    fallback: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    val enabled = remember { PlusSettings.spicyLiveActivity(context) }
+    if (!enabled) {
+        fallback()
+        return
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        SpicyLink.popup(context, showing = true)
+        onDispose { SpicyLink.popup(context, showing = false) }
+    }
+    val live by SpicyLink.live.collectAsState()
+    val current = live?.takeIf { it.fresh() && SpicyLink.matches(it, title, artist) }
+    AnimatedContent(
+        targetState = current != null,
+        transitionSpec = { fadeIn(tween(SONG_FADE_MS)).togetherWith(fadeOut(tween(SONG_FADE_MS / 2))) },
+        label = "spicyPopupOrPlain",
+    ) { isLive ->
+        val state = SpicyLink.live.value?.takeIf { SpicyLink.matches(it, title, artist) }
+        if (isLive && state != null) SpicyPopupCard(state, albumArt, onPlayPause, onSkipNext, onSkipPrevious, onHide, onTouch, pinned, onPin)
+        else fallback()
+    }
+}
+
+@Composable
+private fun SpicyPopupCard(
+    live: SpicyLink.Live,
+    albumArt: Bitmap?,
+    onPlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onHide: () -> Unit,
+    onTouch: () -> Unit,
+    pinnedAtStart: Boolean,
+    onPin: (Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    var pinned by remember { mutableStateOf(pinnedAtStart) }
+    val media = org.koin.compose.koinInject<com.supershade.domain.media.MediaRepository>()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val density = LocalDensity.current
+    val hidePx = with(density) { 36.dp.toPx() }
+    val offsetY = remember { androidx.compose.animation.core.Animatable(0f) }
+    var canvasFailed by remember(live.canvasUrl) { mutableStateOf(false) }
+    var motionFailed by remember(live.motionUrl) { mutableStateOf(false) }
+    val art = remember(albumArt) { albumArt?.asImageBitmap() }
+    val ink = Color(live.ink)
+    val inkEnd = Color(live.inkEnd)
+    val shape = RoundedCornerShape(26.dp)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .displayCutoutPadding()
+            .statusBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .graphicsLayer {
+                translationY = offsetY.value
+                alpha = 1f - (kotlin.math.abs(offsetY.value) / (hidePx * 2f)).coerceIn(0f, 1f)
+            }
+            .pointerInput(Unit) {
+                // Any touch keeps it up; a swipe up hides it.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    onTouch()
+                    var dragging = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            if (dragging) {
+                                if (offsetY.value < -hidePx) {
+                                    scope.launch {
+                                        offsetY.animateTo(-hidePx * 3.5f, tween(160))
+                                        onHide()
+                                    }
+                                } else {
+                                    scope.launch { offsetY.animateTo(0f, spring(0.65f, 800f)) }
+                                }
+                            }
+                            break
+                        }
+                        val dy = change.position.y - down.position.y
+                        if (kotlin.math.abs(dy) > 12f) dragging = true
+                        if (dragging) {
+                            change.consume()
+                            scope.launch { offsetY.snapTo(dy.coerceAtMost(20f)) }
+                        }
+                    }
+                }
+            },
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(Color(0xFF101014))
+                .border(BorderStroke(1.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = 0.4f), Color.White.copy(alpha = 0.06f), ink.copy(alpha = 0.35f)))), shape),
+        ) {
+            androidx.compose.animation.Crossfade(art, Modifier.matchParentSize(), animationSpec = tween(SONG_FADE_MS), label = "popupBackdrop") { shownArt ->
+                if (shownArt != null) {
+                    val blurred = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(30.dp, BlurredEdgeTreatment.Rectangle) else Modifier
+                    Image(shownArt, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().then(blurred).graphicsLayer { alpha = 0.85f })
+                }
+            }
+            val canvas = live.canvasUrl?.takeIf { !canvasFailed }
+            androidx.compose.animation.Crossfade(canvas, Modifier.matchParentSize(), animationSpec = tween(SONG_FADE_MS), label = "popupCanvas") { url ->
+                if (url != null) LoopingVideo(url, Modifier.fillMaxSize(), playing = live.playing, onFailed = { canvasFailed = true })
+            }
+            val veil = (0.3f + live.backdropOpacity * 0.5f).coerceIn(0.3f, 0.8f)
+            Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = veil * 0.6f), Color.Black.copy(alpha = veil)))))
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(Color.White.copy(alpha = 0.08f))
+                            .clickable(onClickLabel = "Open the player") { if (openPlayerApp(context, media, live.player)) onHide() },
+                    ) {
+                        if (art != null) Image(art, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        val motion = live.motionUrl?.takeIf { !motionFailed }
+                        if (motion != null) LoopingVideo(motion, Modifier.fillMaxSize(), playing = live.playing, onFailed = { motionFailed = true })
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(live.title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(live.artist, color = Color.White.copy(alpha = 0.7f), fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    RoundButton(Icons.Rounded.SkipPrevious, "Previous", 20.dp, { onTouch(); onSkipPrevious() })
+                    RoundButton(if (live.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (live.playing) "Pause" else "Play", 22.dp, { onTouch(); onPlayPause() }, filled = true)
+                    RoundButton(Icons.Rounded.SkipNext, "Next", 20.dp, { onTouch(); onSkipNext() })
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PopupLyric(live, ink, inkEnd, Modifier.weight(1f))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Keep the pop-up up (through song changes) until unpinned or swiped away.
+                        SmallToggle(
+                            on = pinned,
+                            icon = if (pinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
+                            label = if (pinned) "Let the pop-up go" else "Keep the pop-up up",
+                            ink = ink,
+                        ) {
+                            pinned = !pinned
+                            onPin(pinned)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        // Float the lyrics out as Spicy Lyrics' overlay, or back.
+                        SmallToggle(
+                            on = live.overlayOn,
+                            icon = Icons.Rounded.PictureInPictureAlt,
+                            label = if (live.overlayOn) "Bring the lyrics back" else "Float the lyrics as an overlay",
+                            ink = ink,
+                        ) {
+                            onTouch()
+                            SpicyLink.setOverlay(context, !live.overlayOn)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The line being sung (filling word by word) and the next one, or nothing without lyrics. */
+@Composable
+private fun PopupLyric(live: SpicyLink.Live, ink: Color, inkEnd: Color, modifier: Modifier) {
+    val lyrics = live.lyrics?.takeIf { !it.isStatic && it.lines.isNotEmpty() }
+    if (lyrics == null) {
+        Spacer(modifier)
+        return
+    }
+    val groups = remember(lyrics) {
+        val out = ArrayList<Group>()
+        for (line in lyrics.lines) {
+            if (line.words.none { it.text.isNotBlank() }) continue
+            if (line.background && out.isNotEmpty()) out[out.lastIndex] = out.last().let { Group(it.lead, it.backing + line) }
+            else out += Group(line, emptyList())
+        }
+        out
+    }
+    if (groups.isEmpty()) {
+        Spacer(modifier)
+        return
+    }
+    val clock = remember { mutableLongStateOf(live.position()) }
+    LaunchedEffect(live) {
+        clock.longValue = live.position()
+        while (live.playing) withFrameMillis { clock.longValue = live.position() }
+    }
+    val index by remember(groups) { derivedStateOf { groups.indexOfLast { it.startMs <= clock.longValue + LEAD_MS }.coerceAtLeast(0) } }
+    val replace = live.translationMode == "Replace"
+    val romanizeReplace = live.romanize && live.romanizationMode == "Replace"
+    AnimatedContent(
+        targetState = index,
+        transitionSpec = {
+            (slideInVertically(spring(Spring.DampingRatioLowBouncy, Spring.StiffnessLow)) { it / 3 } + fadeIn(tween(240)))
+                .togetherWith(slideOutVertically(tween(240)) { -it / 3 } + fadeOut(tween(180)))
+        },
+        modifier = modifier.graphicsLayer { alpha = live.lyricsOpacity.coerceIn(0.1f, 1f) },
+        label = "popupLine",
+    ) { i ->
+        Column(Modifier.fillMaxWidth()) {
+            val group = groups[i.coerceIn(0, groups.lastIndex)]
+            val lead = group.lead
+            SungLine(
+                shownLine(lead, replace), lyrics.wordSynced && !lead.lineTimed && !(replace && lead.translation != null),
+                clock, ink, inkEnd, live.glow, live.glowStrength, 18f, lead.opposite, romanizeReplace,
+            )
+            groups.getOrNull(i + 1)?.let { next ->
+                Spacer(Modifier.height(3.dp))
+                SideText(shownText(next.lead, replace, romanizeReplace), next.lead.opposite, Color.White.copy(alpha = 0.42f), 13.5f, FontWeight.SemiBold, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmallToggle(on: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, ink: Color, onClick: () -> Unit) {
+    Box(
+        Modifier.size(32.dp).clip(CircleShape)
+            .background(if (on) ink.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.14f))
+            .clickable(onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, label, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(16.dp))
     }
 }

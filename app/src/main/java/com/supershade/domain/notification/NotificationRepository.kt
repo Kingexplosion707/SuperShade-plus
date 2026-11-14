@@ -278,6 +278,14 @@ class NotificationRepository(
         _notifications.update { current -> current.filter { it.key != key } }
     }
 
+    /** Plus: a notification marked to go away once opened goes, as the system shade does it. */
+    fun autoCancelAfterLaunch(key: String) {
+        val sbn = activeSbns[key] ?: return
+        if (sbn.notification.flags and android.app.Notification.FLAG_AUTO_CANCEL != 0 && sbn.isClearable) {
+            canceller?.invoke(key)
+        }
+    }
+
     fun cancelAndRemove(key: String) {
         val target = _notifications.value.find { it.key == key }
         if (target != null) {

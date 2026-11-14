@@ -157,12 +157,12 @@ class ShadeViewModel(
                     isRecording = true,
                     customPlayPauseAction = {
                         try {
-                            playPauseAction?.pendingIntent?.send()
+                            com.supershade.plus.PendingLaunch.send(context, playPauseAction?.pendingIntent)
                         } catch (_: Exception) {}
                     },
                     customStopAction = {
                         try {
-                            stopAction?.pendingIntent?.send()
+                            com.supershade.plus.PendingLaunch.send(context, stopAction?.pendingIntent)
                         } catch (_: Exception) {}
                     },
                 )
@@ -748,9 +748,10 @@ class ShadeViewModel(
 
     fun launchNotification(notification: com.supershade.domain.notification.model.ShadeNotification) {
         notificationRepo.recordLaunch(notification)
-        try {
-            notification.contentIntent?.send()
-        } catch (_: Exception) {}
+        // Plus: send so the app actually opens (Android 14+), else open the app itself.
+        if (com.supershade.plus.PendingLaunch.send(context, notification.contentIntent, fallbackPackage = notification.packageName)) {
+            notificationRepo.autoCancelAfterLaunch(notification.key)
+        }
         close()
     }
 
