@@ -770,6 +770,7 @@ private fun SpicyPopupCard(
     val shape = RoundedCornerShape(26.dp)
     Box(
         Modifier
+            .then(if (PlusSettings.popupAnimation(context)) Modifier.genieReveal() else Modifier)
             .fillMaxWidth()
             .displayCutoutPadding()
             .statusBarsPadding()

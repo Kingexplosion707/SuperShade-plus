@@ -12,6 +12,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
+import com.supershade.plus.genieReveal
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -523,9 +524,11 @@ class HeadsUpOverlay(
         val hideThresholdPx = ctx.resources.displayMetrics.density * 36f
         val dismissThresholdPx = ctx.resources.displayMetrics.density * 110f
 
+        // Plus: out from behind the camera, as a window comes out of the macOS Dock.
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(tween(260)) { -it } + fadeIn(tween(200)),
+            modifier = if (com.supershade.plus.PlusSettings.popupAnimation(ctx)) Modifier.genieReveal() else Modifier,
+            enter = if (com.supershade.plus.PlusSettings.popupAnimation(ctx)) androidx.compose.animation.EnterTransition.None else slideInVertically(tween(260)) { -it } + fadeIn(tween(200)),
         ) {
             val cardShape = when (theme) {
                 is ShadeTheme.Cyberpunk -> ChamferedCornerShape(12.dp)
@@ -1010,9 +1013,11 @@ class HeadsUpOverlay(
         val offsetY = remember { Animatable(0f) }
         val hideThresholdPx = ctx.resources.displayMetrics.density * 36f
 
+        // Plus: out from behind the camera, as a window comes out of the macOS Dock.
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(tween(260)) { -it } + fadeIn(tween(200)),
+            modifier = if (com.supershade.plus.PlusSettings.popupAnimation(ctx)) Modifier.genieReveal() else Modifier,
+            enter = if (com.supershade.plus.PlusSettings.popupAnimation(ctx)) androidx.compose.animation.EnterTransition.None else slideInVertically(tween(260)) { -it } + fadeIn(tween(200)),
         ) {
             val cardShape = when (theme) {
                 is ShadeTheme.Cyberpunk -> ChamferedCornerShape(12.dp)
