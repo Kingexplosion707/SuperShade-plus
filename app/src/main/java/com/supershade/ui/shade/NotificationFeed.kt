@@ -840,7 +840,7 @@ fun NotificationFeed(
                     if (group.isStacked) {
                         GroupedNotificationCard(
                             group = group,
-                            onDismissGroup = { group.notifications.forEach { onDismiss(it.key) } },
+                            onDismissGroup = { group.notifications.filter { it.isClearable }.forEach { onDismiss(it.key) } },
                             onDismiss = onDismiss,
                             onNotificationClick = onNotificationClick,
                             onSnooze = onSnooze,
@@ -1039,7 +1039,7 @@ fun TogetherNotificationFeed(
                     if (group.isStacked) {
                         GroupedNotificationCard(
                             group = group,
-                            onDismissGroup = { group.notifications.forEach { onDismiss(it.key) } },
+                            onDismissGroup = { group.notifications.filter { it.isClearable }.forEach { onDismiss(it.key) } },
                             onDismiss = onDismiss,
                             onNotificationClick = onNotificationClick,
                             onSnooze = onSnooze,

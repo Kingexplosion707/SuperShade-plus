@@ -150,6 +150,9 @@ fun GroupedNotificationCard(
     FluidSwipeToDismiss(
         state = swipeState,
         onDismissed = { onDismissGroup() },
+        // Plus: a group of only ongoing notifications can't be swiped away (they'd come back).
+        enableStartToEnd = group.notifications.any { it.isClearable },
+        enableEndToStart = group.notifications.any { it.isClearable },
         modifier = modifier.fillMaxWidth(),
         backgroundContent = {
             val isSwiping = !swipeState.isAtRest
