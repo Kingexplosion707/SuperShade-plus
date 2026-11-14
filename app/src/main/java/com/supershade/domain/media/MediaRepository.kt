@@ -66,6 +66,9 @@ class MediaRepository(private val context: Context) {
     fun skipNext() { activeController?.transportControls?.skipToNext() }
     fun skipPrevious() { activeController?.transportControls?.skipToPrevious() }
     fun seekTo(positionMs: Long) { activeController?.transportControls?.seekTo(positionMs) }
+    /** Plus: the player's own now-playing screen, and its package, for the live activity's cover. */
+    fun sessionActivity(): android.app.PendingIntent? = activeController?.sessionActivity
+    fun playerPackage(): String? = activeController?.packageName
 
     fun dispose() {
         activeController?.unregisterCallback(controllerCallback)

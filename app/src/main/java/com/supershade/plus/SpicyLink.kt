@@ -99,6 +99,12 @@ object SpicyLink {
     private val _live = MutableStateFlow<Live?>(null)
     val live: StateFlow<Live?> = _live
 
+    /** The song was just moved to [positionMs] from the shade: show it there until Spicy Lyrics answers. */
+    fun seeked(positionMs: Long) {
+        val current = _live.value ?: return
+        _live.value = current.copy(positionMs = positionMs.coerceAtLeast(0L), atElapsed = SystemClock.elapsedRealtime())
+    }
+
     private val main = Handler(Looper.getMainLooper())
     private var receiver: BroadcastReceiver? = null
     private var open = false
