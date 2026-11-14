@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -172,7 +173,7 @@ fun SpicyLiveActivityCard(
                 }
             }
             Spacer(Modifier.height(14.dp))
-            SpicyLyrics(live, ink, inkEnd, Modifier.fillMaxWidth().height(LYRICS_HEIGHT))
+            SpicyLyrics(live, ink, inkEnd, Modifier.fillMaxWidth().heightIn(min = LYRICS_HEIGHT))
             Spacer(Modifier.height(12.dp))
             SpicyProgress(live, ink)
             Row(
@@ -221,10 +222,12 @@ private fun SpicyProgress(live: SpicyLink.Live, ink: Color) {
 }
 
 /**
- * The lyrics in Spicy Lyrics' style: the line being sung large, each word filling from dim to
- * bright as it's sung with a soft glow under the sung part, the last line fading out above and
- * the next ones waiting below; lines change with a spring. Line-synced lyrics fill a line at a
- * time; unsynced ones simply show.
+ * The lyrics in Spicy Lyrics' style. The line being sung is large, each word filling from dim to
+ * bright as it's sung with a soft glow under the sung part; its background vocals fill under it,
+ * smaller and dimmer; a second singer's lines sit on the right, as on the lyrics screen; the
+ * translation (and romanization) shows under each line, or in its place, as Spicy Lyrics is set.
+ * The last line fades out above and the next waits below; lines change with a spring.
+ * Line-synced lyrics fill a line at a time; unsynced ones simply show.
  */
 @Composable
 private fun SpicyLyrics(live: SpicyLink.Live, ink: Color, inkEnd: Color, modifier: Modifier) {
@@ -241,19 +244,31 @@ private fun SpicyLyrics(live: SpicyLink.Live, ink: Color, inkEnd: Color, modifie
         }
         return
     }
-    val lines = remember(lyrics) { lyrics.lines.filter { !it.background && it.words.any { w -> w.text.isNotBlank() } } }
+    // Each lead line with the background vocals that follow it.
+    val groups = remember(lyrics) {
+        val out = ArrayList<Group>()
+        for (line in lyrics.lines) {
+            if (line.words.none { it.text.isNotBlank() }) continue
+            if (line.background && out.isNotEmpty()) out[out.lastIndex] = out.last().let { Group(it.lead, it.backing + line) }
+            else out += Group(line, emptyList())
+        }
+        out
+    }
     // The clock, read while drawing; only a change of line recomposes.
     val clock = remember { mutableLongStateOf(live.position()) }
     LaunchedEffect(live) {
         while (true) withFrameMillis { clock.longValue = live.position() }
     }
-    val index by remember(lines) {
+    val index by remember(groups) {
         derivedStateOf {
-            if (lyrics.isStatic) 0 else lines.indexOfLast { it.startMs <= clock.longValue + LEAD_MS }.coerceAtLeast(0)
+            if (lyrics.isStatic) 0 else groups.indexOfLast { it.startMs <= clock.longValue + LEAD_MS }.coerceAtLeast(0)
         }
     }
     val alpha = live.lyricsOpacity.coerceIn(0.1f, 1f)
     val scale = (live.fontScale / 0.78f).coerceIn(0.8f, 1.25f)
+    val replaceWithTranslation = live.translationMode == "Replace"
+    val romanizeReplace = live.romanize && live.romanizationMode == "Replace"
+    val romanizeUnder = live.romanize && live.romanizationMode != "Replace"
     AnimatedContent(
         targetState = index,
         transitionSpec = {
@@ -263,31 +278,94 @@ private fun SpicyLyrics(live: SpicyLink.Live, ink: Color, inkEnd: Color, modifie
         modifier = modifier.graphicsLayer { this.alpha = alpha },
         label = "spicyLine",
     ) { i ->
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
-            lines.getOrNull(i - 1)?.takeIf { !lyrics.isStatic }?.let {
-                Text(
-                    it.text, color = Color.White.copy(alpha = 0.32f), fontSize = (15 * scale).sp, fontWeight = FontWeight.SemiBold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.Center) {
+            groups.getOrNull(i - 1)?.takeIf { !lyrics.isStatic }?.let { prev ->
+                SideText(
+                    shownText(prev.lead, replaceWithTranslation, romanizeReplace), prev.lead.opposite,
+                    Color.White.copy(alpha = 0.32f), (15 * scale), FontWeight.SemiBold, maxLines = 1,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(5.dp))
             }
-            val line = lines.getOrNull(i)
-            if (line != null) {
+            val group = groups.getOrNull(i)
+            if (group != null) {
+                val lead = group.lead
                 if (lyrics.isStatic) {
-                    Text(line.text, color = Color.White.copy(alpha = 0.9f), fontSize = (21 * scale).sp, fontWeight = FontWeight.Bold)
+                    SideText(shownText(lead, replaceWithTranslation, romanizeReplace), lead.opposite, Color.White.copy(alpha = 0.9f), 21 * scale, FontWeight.Bold)
                 } else {
-                    SungLine(line, lyrics.wordSynced && !line.lineTimed, clock, ink, inkEnd, live.glow, live.glowStrength, (23 * scale))
+                    SungLine(
+                        shownLine(lead, replaceWithTranslation), lyrics.wordSynced && !lead.lineTimed && !(replaceWithTranslation && lead.translation != null),
+                        clock, ink, inkEnd, live.glow, live.glowStrength, 23 * scale, lead.opposite, romanizeReplace,
+                    )
+                }
+                Extras(lead, replaceWithTranslation, romanizeUnder, scale, 1f)
+                // Background vocals: smaller and dimmer, filling as they're sung, on the same side.
+                for (backing in group.backing) {
+                    Spacer(Modifier.height(4.dp))
+                    if (lyrics.isStatic) {
+                        SideText(shownText(backing, replaceWithTranslation, romanizeReplace), lead.opposite, Color.White.copy(alpha = 0.6f), 15 * scale, FontWeight.SemiBold)
+                    } else {
+                        SungLine(
+                            shownLine(backing, replaceWithTranslation), lyrics.wordSynced && !backing.lineTimed && !(replaceWithTranslation && backing.translation != null),
+                            clock, ink.copy(alpha = 0.85f), inkEnd.copy(alpha = 0.85f), live.glow, live.glowStrength * 0.6f,
+                            15.5f * scale, lead.opposite, romanizeReplace, dimAlpha = 0.26f, weight = FontWeight.Bold,
+                        )
+                    }
+                    Extras(backing, replaceWithTranslation, romanizeUnder, scale, 0.75f, lead.opposite)
                 }
             }
-            lines.getOrNull(i + 1)?.let {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    it.text, color = Color.White.copy(alpha = 0.42f), fontSize = (16 * scale).sp, fontWeight = FontWeight.SemiBold,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+            groups.getOrNull(i + 1)?.let { next ->
+                Spacer(Modifier.height(7.dp))
+                SideText(
+                    shownText(next.lead, replaceWithTranslation, romanizeReplace), next.lead.opposite,
+                    Color.White.copy(alpha = 0.42f), 16 * scale, FontWeight.SemiBold, maxLines = 2,
                 )
             }
         }
     }
+}
+
+/** A lead line and the background vocals sung with it. */
+private class Group(val lead: SpicyLink.Line, val backing: List<SpicyLink.Line>) {
+    val startMs: Long get() = minOf(lead.startMs, backing.minOfOrNull { it.startMs } ?: lead.startMs)
+}
+
+/** The line as shown: its translation in its place when translations replace the lines. */
+private fun shownLine(line: SpicyLink.Line, replace: Boolean): SpicyLink.Line {
+    val translation = line.translation
+    if (!replace || translation == null) return line
+    return SpicyLink.Line(
+        line.startMs, line.endMs, line.background, line.opposite, lineTimed = true,
+        words = listOf(SpicyLink.Word(translation, line.startMs, line.endMs, attached = false)),
+        translation = null, agent = line.agent,
+    )
+}
+
+private fun shownText(line: SpicyLink.Line, replace: Boolean, romanized: Boolean): String =
+    line.translation?.takeIf { replace } ?: if (romanized) line.romanizedText ?: line.text else line.text
+
+/** Under a line: its romanization (when it goes under) and its translation (when it goes under). */
+@Composable
+private fun Extras(line: SpicyLink.Line, replace: Boolean, romanizeUnder: Boolean, scale: Float, size: Float, opposite: Boolean = line.opposite) {
+    if (romanizeUnder) line.romanizedText?.takeIf { it != line.text }?.let {
+        Spacer(Modifier.height(2.dp))
+        SideText(it, opposite, Color.White.copy(alpha = 0.6f), 13.5f * scale * size, FontWeight.Medium)
+    }
+    if (!replace) line.translation?.let {
+        Spacer(Modifier.height(2.dp))
+        SideText(it, opposite, Color.White.copy(alpha = 0.58f), 13.5f * scale * size, FontWeight.Medium, maxLines = 2)
+    }
+}
+
+/** Text on its singer's side: the right for a second singer, as on the lyrics screen. */
+@Composable
+private fun SideText(text: String, opposite: Boolean, color: Color, sizeSp: Float, weight: FontWeight, maxLines: Int = 3) {
+    Text(
+        text,
+        color = color, fontSize = sizeSp.sp, fontWeight = weight,
+        maxLines = maxLines, overflow = TextOverflow.Ellipsis,
+        textAlign = if (opposite) TextAlign.End else TextAlign.Start,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** One line filling word by word ([wordSynced]) or as a whole, drawn by hand for the fill and glow. */
@@ -301,44 +379,52 @@ private fun SungLine(
     glow: Boolean,
     glowStrength: Float,
     sizeSp: Float,
+    opposite: Boolean = false,
+    romanized: Boolean = false,
+    dimAlpha: Float = DIM_ALPHA,
+    weight: FontWeight = FontWeight.ExtraBold,
 ) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
+    val text = remember(line, romanized) { line.joined(romanized) }
     // Where each word sits in the line's text.
-    val spans = remember(line) {
+    val spans = remember(line, romanized) {
         val out = ArrayList<IntArray>()
         var at = 0
         for ((n, w) in line.words.withIndex()) {
-            val text = w.text.trim()
+            val word = (if (romanized) w.romanized ?: w.text else w.text).trim()
             if (n > 0 && !w.attached) at += 1
-            out += intArrayOf(at, at + text.length)
-            at += text.length
+            out += intArrayOf(at, at + word.length)
+            at += word.length
         }
         out
     }
-    val style = TextStyle(fontSize = sizeSp.sp, fontWeight = FontWeight.ExtraBold, lineHeight = (sizeSp * 1.18f).sp, textAlign = TextAlign.Start)
+    val style = TextStyle(
+        fontSize = sizeSp.sp, fontWeight = weight, lineHeight = (sizeSp * 1.18f).sp,
+        textAlign = if (opposite) TextAlign.End else TextAlign.Start,
+    )
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val widthPx = constraints.maxWidth
-        val layout = remember(line, widthPx, sizeSp) {
-            measurer.measure(line.text, style, maxLines = 3, overflow = TextOverflow.Ellipsis, constraints = Constraints(maxWidth = widthPx))
+        val layout = remember(text, widthPx, sizeSp, opposite, weight) {
+            measurer.measure(text, style, maxLines = 3, overflow = TextOverflow.Ellipsis, constraints = Constraints(minWidth = widthPx, maxWidth = widthPx))
         }
         val heightDp = with(density) { layout.size.height.toDp() }
         val brush = Brush.verticalGradient(listOf(ink, inkEnd))
         Canvas(Modifier.fillMaxWidth().height(heightDp)) {
             val now = clock.longValue
             // Shadow.None: a layout keeps the last shadow drawn with it.
-            drawText(layout, color = Color.White.copy(alpha = DIM_ALPHA), shadow = Shadow.None)
+            drawText(layout, color = Color.White.copy(alpha = dimAlpha), shadow = Shadow.None)
             val pieces: List<Pair<IntArray, Float>> = if (wordSynced) {
                 line.words.indices.map { k ->
                     val w = line.words[k]
                     spans[k] to ((now - w.startMs).toFloat() / (w.endMs - w.startMs).coerceAtLeast(1)).coerceIn(0f, 1f)
                 }
             } else {
-                listOf(intArrayOf(0, line.text.length) to ((now - line.startMs).toFloat() / (line.endMs - line.startMs).coerceAtLeast(1)).coerceIn(0f, 1f))
+                listOf(intArrayOf(0, text.length) to ((now - line.startMs).toFloat() / (line.endMs - line.startMs).coerceAtLeast(1)).coerceIn(0f, 1f))
             }
             val glowShadow = if (glow) Shadow(ink.copy(alpha = (0.55f * glowStrength).coerceIn(0f, 1f)), Offset.Zero, sizeSp * density.density * 0.45f) else Shadow.None
             for ((span, progress) in pieces) {
-                if (progress <= 0f || span[1] <= span[0] || span[1] > line.text.length) continue
+                if (progress <= 0f || span[1] <= span[0] || span[1] > text.length) continue
                 val first = layout.getBoundingBox(span[0])
                 val last = layout.getBoundingBox(span[1] - 1)
                 if (layout.getLineForOffset(span[0]) == layout.getLineForOffset(span[1] - 1)) {

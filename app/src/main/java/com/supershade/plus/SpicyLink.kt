@@ -30,7 +30,7 @@ object SpicyLink {
     /** An answer older than this (Spicy Lyrics gone quiet) no longer shows. */
     const val STALE_MS = 20_000L
 
-    class Word(val text: String, val startMs: Long, val endMs: Long, val attached: Boolean)
+    class Word(val text: String, val startMs: Long, val endMs: Long, val attached: Boolean, val romanized: String? = null)
 
     class Line(
         val startMs: Long,
@@ -40,13 +40,18 @@ object SpicyLink {
         val lineTimed: Boolean,
         val words: List<Word>,
         val translation: String?,
+        /** Who sings it, where the lyrics say (duets). */
+        val agent: String? = null,
     ) {
-        val text: String by lazy {
-            buildString {
-                for (w in words) {
-                    if (isNotEmpty() && !w.attached) append(' ')
-                    append(w.text.trim())
-                }
+        val text: String by lazy { joined(romanized = false) }
+        /** The line romanized, where its words came romanized; null where none did. */
+        val romanizedText: String? by lazy { if (words.any { it.romanized != null }) joined(romanized = true) else null }
+
+        /** The line's words joined, each as itself or romanized. */
+        fun joined(romanized: Boolean): String = buildString {
+            for (w in words) {
+                if (isNotEmpty() && !w.attached) append(' ')
+                append((if (romanized) w.romanized ?: w.text else w.text).trim())
             }
         }
     }
@@ -79,6 +84,10 @@ object SpicyLink {
         val backdropOpacity: Float,
         val fontScale: Float,
         val receivedAt: Long,
+        /** "UnderLine" or "Replace", as on Spicy Lyrics' lyrics screen. */
+        val translationMode: String = "UnderLine",
+        val romanize: Boolean = false,
+        val romanizationMode: String = "Replace",
     ) {
         /** Where the song is now, run on from the last answer while it plays. */
         fun position(): Long =
@@ -178,6 +187,9 @@ object SpicyLink {
             backdropOpacity = intent.getFloatExtra("backdrop_opacity", 0.45f),
             fontScale = intent.getFloatExtra("font_scale", 0.78f),
             receivedAt = SystemClock.elapsedRealtime(),
+            translationMode = intent.getStringExtra("translation_mode") ?: "UnderLine",
+            romanize = intent.getBooleanExtra("romanize", false),
+            romanizationMode = intent.getStringExtra("romanization_mode") ?: "Replace",
         )
     }
 
@@ -191,7 +203,7 @@ object SpicyLink {
             val words = ArrayList<Word>(w.length())
             for (j in 0 until w.length()) {
                 val a = w.getJSONArray(j)
-                words += Word(a.getString(0), a.getLong(1), a.getLong(2), a.optInt(3) == 1)
+                words += Word(a.getString(0), a.getLong(1), a.getLong(2), a.optInt(3) == 1, a.optString(4).takeIf { a.length() > 4 && it.isNotBlank() })
             }
             parsed += Line(
                 startMs = o.getLong("s"),
@@ -201,6 +213,7 @@ object SpicyLink {
                 lineTimed = o.optBoolean("lt"),
                 words = words,
                 translation = o.optString("tr").takeIf { it.isNotBlank() },
+                agent = o.optString("ag").takeIf { it.isNotBlank() },
             )
         }
         Lyrics(root.optString("type", "Syllable"), parsed)
