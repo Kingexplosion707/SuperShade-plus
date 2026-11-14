@@ -264,6 +264,10 @@ class HeadsUpOverlay(
             }
             currentView = view
             try {
+                // Plus: the blur behind is a setting (off by default); it blurred the whole screen.
+                com.supershade.plus.PlusSettings.applyPopupBlur(
+                    context, params, (22 * context.resources.displayMetrics.density).toInt().coerceIn(50, 90),
+                )
                 wm.addView(view, params)
             } catch (_: Exception) {
                 owner.destroy()
@@ -360,6 +364,10 @@ class HeadsUpOverlay(
             }
             currentView = view
             try {
+                // Plus: the blur behind is a setting (off by default); it blurred the whole screen.
+                com.supershade.plus.PlusSettings.applyPopupBlur(
+                    context, params, (22 * context.resources.displayMetrics.density).toInt().coerceIn(50, 90),
+                )
                 wm.addView(view, params)
             } catch (_: Exception) {
                 owner.destroy()

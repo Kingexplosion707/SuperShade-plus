@@ -83,6 +83,16 @@ fun PlusSettingsSection(shizukuConnected: Boolean) {
                 PlusSettings.put(context, PlusSettings.ZONE_EXTRA_DP, it)
             }
             HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            var blur by remember { mutableIntStateOf(PlusSettings.popupBlur(context)) }
+            SliderRow(
+                "Pop-up background blur",
+                if (blur == 0) "Off: notification and media pop-ups leave the screen sharp" else "$blur% blur behind notification and media pop-ups",
+                blur, 0..100,
+            ) {
+                blur = it
+                PlusSettings.put(context, PlusSettings.POPUP_BLUR, it)
+            }
+            HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             // Every permission at once, through Shizuku.
             val governor = org.koin.compose.koinInject<com.supershade.shizuku.StatusBarGovernor>()
             val scope = androidx.compose.runtime.rememberCoroutineScope()
