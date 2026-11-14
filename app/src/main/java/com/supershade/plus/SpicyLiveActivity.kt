@@ -17,6 +17,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -758,8 +760,8 @@ private fun SpicyPopupCard(
             }
             .pointerInput(Unit) {
                 // Any touch keeps it up; a swipe up hides it.
-                androidx.compose.foundation.gestures.awaitEachGesture {
-                    val down = androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false)
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
                     onTouch()
                     var dragging = false
                     while (true) {
