@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * SuperShade Plus's own settings: Spicy Lyrics' live activity, where along the top a swipe opens
@@ -80,6 +81,32 @@ fun PlusSettingsSection(shizukuConnected: Boolean) {
             SliderRow("Swipe zone depth", "Status bar plus $depth dp", depth, 0..80) {
                 depth = it
                 PlusSettings.put(context, PlusSettings.ZONE_EXTRA_DP, it)
+            }
+            HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            // Every permission at once, through Shizuku.
+            val governor = org.koin.compose.koinInject<com.supershade.shizuku.StatusBarGovernor>()
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            var grantStatus by remember { mutableStateOf<String?>(null) }
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Grant every permission", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
+                    Text(
+                        grantStatus ?: "Through Shizuku: notification access, accessibility, drawing over apps, settings access, Do Not Disturb, phone and Bluetooth, and no battery limits.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.padding(start = 12.dp))
+                androidx.compose.material3.FilledTonalButton(
+                    enabled = shizukuConnected,
+                    onClick = {
+                        grantStatus = "Granting…"
+                        scope.launch {
+                            val result = ShizukuGrants.grantAll(context, governor)
+                            grantStatus = if (result.failed.isEmpty()) "Granted ${result.granted.size} permissions."
+                            else "Granted ${result.granted.size}; couldn't grant: ${result.failed.joinToString()}."
+                        }
+                    },
+                ) { Text("Grant") }
             }
             HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             var strict by remember { mutableStateOf(PlusSettings.strictBlock(context)) }

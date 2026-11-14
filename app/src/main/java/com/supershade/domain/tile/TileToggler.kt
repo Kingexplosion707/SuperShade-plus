@@ -39,6 +39,12 @@ class TileToggler(
 
         try {
             when {
+                // Plus: SystemUI's own recorder can't be clicked from outside; record through Shizuku instead.
+                id.contains("screenrecord") || id.contains("screen_record") -> {
+                    val recording = com.supershade.plus.ScreenRecorder.toggle(context, governor)
+                    tileRepo?.setTileActiveOptimistic(tile.id, recording)
+                }
+
                 // Flashlight: direct CameraManager
                 id.contains("flashlight") -> toggleFlashlight(newState)
 

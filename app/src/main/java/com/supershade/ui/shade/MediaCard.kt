@@ -567,6 +567,23 @@ fun OneUi9MediaCard(
     mediaCollapsed: Boolean = false,
     onToggleCollapse: () -> Unit = {},
 ) {
+    // Plus: Spicy Lyrics' live activity in place of the card while it sends this song, in every panel style.
+    com.supershade.plus.SpicyLiveActivityOr(media.title, media.artist, media.albumArt, onPlayPause, onSkipNext, onSkipPrevious, modifier) {
+        OneUi9MediaCardBody(media, onPlayPause, onSkipNext, onSkipPrevious, onSeek, modifier, mediaCollapsed, onToggleCollapse)
+    }
+}
+
+@Composable
+private fun OneUi9MediaCardBody(
+    media: MediaState,
+    onPlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onSeek: (Long) -> Unit = {},
+    modifier: Modifier = Modifier,
+    mediaCollapsed: Boolean = false,
+    onToggleCollapse: () -> Unit = {},
+) {
     val context = LocalContext.current
     val haptics = LocalSuperHaptics.current ?: remember(context) { SuperHaptics(context) }
 
@@ -1183,6 +1200,23 @@ fun NothingMediaCard(
     mediaCollapsed: Boolean = false,
     onToggleCollapse: () -> Unit = {},
 ) {
+    // Plus: Spicy Lyrics' live activity in place of the card while it sends this song, in every panel style.
+    com.supershade.plus.SpicyLiveActivityOr(media.title, media.artist, media.albumArt, onPlayPause, onSkipNext, onSkipPrevious, modifier) {
+        NothingMediaCardBody(media, onPlayPause, onSkipNext, onSkipPrevious, onSeek, modifier, mediaCollapsed, onToggleCollapse)
+    }
+}
+
+@Composable
+private fun NothingMediaCardBody(
+    media: MediaState,
+    onPlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onSeek: (Long) -> Unit = {},
+    modifier: Modifier = Modifier,
+    mediaCollapsed: Boolean = false,
+    onToggleCollapse: () -> Unit = {},
+) {
     val context = LocalContext.current
     val haptics = LocalSuperHaptics.current ?: remember(context) { SuperHaptics(context) }
     var isLiked by remember(media.title + media.artist) { mutableStateOf(false) }
@@ -1547,6 +1581,23 @@ fun NothingMediaCard(
  */
 @Composable
 fun CyberpunkMediaCard(
+    media: MediaState,
+    onPlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onSeek: (Long) -> Unit = {},
+    modifier: Modifier = Modifier,
+    mediaCollapsed: Boolean = false,
+    onToggleCollapse: () -> Unit = {},
+) {
+    // Plus: Spicy Lyrics' live activity in place of the card while it sends this song, in every panel style.
+    com.supershade.plus.SpicyLiveActivityOr(media.title, media.artist, media.albumArt, onPlayPause, onSkipNext, onSkipPrevious, modifier) {
+        CyberpunkMediaCardBody(media, onPlayPause, onSkipNext, onSkipPrevious, onSeek, modifier, mediaCollapsed, onToggleCollapse)
+    }
+}
+
+@Composable
+private fun CyberpunkMediaCardBody(
     media: MediaState,
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
@@ -1924,6 +1975,23 @@ fun CyberpunkMediaCard(
  */
 @Composable
 fun PureMaterialMediaCard(
+    media: MediaState,
+    onPlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onSeek: (Long) -> Unit = {},
+    modifier: Modifier = Modifier,
+    mediaCollapsed: Boolean = false,
+    onToggleCollapse: () -> Unit = {},
+) {
+    // Plus: Spicy Lyrics' live activity in place of the card while it sends this song, in every panel style.
+    com.supershade.plus.SpicyLiveActivityOr(media.title, media.artist, media.albumArt, onPlayPause, onSkipNext, onSkipPrevious, modifier) {
+        PureMaterialMediaCardBody(media, onPlayPause, onSkipNext, onSkipPrevious, onSeek, modifier, mediaCollapsed, onToggleCollapse)
+    }
+}
+
+@Composable
+private fun PureMaterialMediaCardBody(
     media: MediaState,
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
