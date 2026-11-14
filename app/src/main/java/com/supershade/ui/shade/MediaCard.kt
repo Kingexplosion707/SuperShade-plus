@@ -2077,6 +2077,31 @@ fun MediaCard(
     mediaCollapsed: Boolean = false,
     onToggleCollapse: () -> Unit = {},
 ) {
+    // Plus: Spicy Lyrics' live activity in place of the card while it sends this song.
+    com.supershade.plus.SpicyLiveActivityOr(
+        title = media.title,
+        artist = media.artist,
+        albumArt = media.albumArt,
+        onPlayPause = onPlayPause,
+        onSkipNext = onSkipNext,
+        onSkipPrevious = onSkipPrevious,
+        modifier = modifier,
+    ) {
+        ThemedMediaCard(media, onPlayPause, onSkipNext, onSkipPrevious, onSeek, modifier, mediaCollapsed, onToggleCollapse)
+    }
+}
+
+@Composable
+private fun ThemedMediaCard(
+    media: MediaState,
+    onPlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier,
+    mediaCollapsed: Boolean,
+    onToggleCollapse: () -> Unit,
+) {
     val theme = LocalShadeTheme.current
     when (theme) {
         is ShadeTheme.Pixel -> {

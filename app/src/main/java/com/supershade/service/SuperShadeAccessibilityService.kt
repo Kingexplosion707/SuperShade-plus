@@ -60,6 +60,8 @@ class SuperShadeAccessibilityService : AccessibilityService() {
 
     private var windowManager: WindowManager? = null
     private var touchCaptureView: View? = null
+    /** Every window of the zone (Plus: split around a gap, sized by its settings). */
+    private var zoneViews: List<View> = emptyList()
     @Volatile private var isSuperShadeActive = false
     @Volatile private var currentSplitGestureMode = com.supershade.settings.SplitGestureMode.SEPARATE_70_30
     /** Epoch-ms of the last time SuperShade was opened via TYPE_WINDOWS_CHANGED; used to debounce false triggers. */
@@ -114,6 +116,11 @@ class SuperShadeAccessibilityService : AccessibilityService() {
             .onEach { mode ->
                 currentSplitGestureMode = mode
             }
+            .launchIn(scope)
+
+        // Plus: the swipe zone's start, end, depth and island gap.
+        com.supershade.plus.PlusSettings.changes(this)
+            .onEach { key -> if (key in com.supershade.plus.PlusZoneKeys) relayoutTouchCapture() }
             .launchIn(scope)
     }
 
@@ -267,24 +274,21 @@ class SuperShadeAccessibilityService : AccessibilityService() {
         }
 
         touchCaptureView = view
-        try {
-            wm.addView(view, params)
-            android.util.Log.i("SuperShadeA11y", "TYPE_ACCESSIBILITY_OVERLAY touch window added successfully at height $statusBarHeightPx px")
-        } catch (e: Exception) {
-            android.util.Log.e("SuperShadeA11y", "Failed to add TYPE_ACCESSIBILITY_OVERLAY window", e)
-        }
+        val statusBarPx = statusBarHeightPx - (20 * density).toInt()
+        zoneViews = com.supershade.plus.GestureZones.addWindows(this, wm, view, params, statusBarPx)
+        android.util.Log.i("SuperShadeA11y", "Touch zone added as ${zoneViews.size} window(s)")
+    }
+
+    /** The zone's settings changed: lay it out again. */
+    private fun relayoutTouchCapture() {
+        if (touchCaptureView == null) return
+        detachAccessibilityTouchCapture()
+        attachAccessibilityTouchCapture()
     }
 
     private fun detachAccessibilityTouchCapture() {
-        touchCaptureView?.let { view ->
-            try {
-                if (view.isAttachedToWindow) {
-                    windowManager?.removeViewImmediate(view)
-                }
-            } catch (t: Throwable) {
-                android.util.Log.w("SuperShadeA11y", "Error removing touch window", t)
-            }
-        }
+        com.supershade.plus.GestureZones.removeWindows(windowManager, zoneViews)
+        zoneViews = emptyList()
         touchCaptureView = null
     }
 
@@ -308,6 +312,10 @@ class SuperShadeAccessibilityService : AccessibilityService() {
                                 w.title?.toString() == "NotificationShade" &&
                                 w.layer >= 2
                         } catch (t: Throwable) { false }
+                    }
+                    if (isSystemShadeVisible && com.supershade.plus.PlusSettings.strictBlock(this)) {
+                        // Plus: the system's shade isn't allowed open at all.
+                        scope.launch { governor.collapse() }
                     }
                     if (isSystemShadeVisible) {
                         lastShadeOpenTimeMs = now

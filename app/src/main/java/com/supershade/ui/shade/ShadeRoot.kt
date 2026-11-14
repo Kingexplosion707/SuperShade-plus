@@ -345,7 +345,11 @@ fun ShadeRoot(
         LocalShadeShapeScheme provides shapeScheme,
         LocalBackdropTheme provides backdropTheme,
     ) {
-        themeWrapper {
+        // Plus: Liquid Glass turns the cards to glass inside the theme.
+        val glassWrapper: @Composable (@Composable () -> Unit) -> Unit = { content ->
+            themeWrapper { com.supershade.plus.LiquidGlass(backdropTheme == BackdropTheme.LIQUID_GLASS, content) }
+        }
+        glassWrapper {
             Box(modifier = Modifier.fillMaxSize()) {
                 // Dimmer scrim — tapping it dismisses the shade.
                 // In AOSP/OneUI, scrim smoothly fades out in real time as the shade is pulled up.
@@ -389,6 +393,8 @@ fun ShadeRoot(
                             if (isAmoled) Color(0xFF000000) else MaterialTheme.colorScheme.surface
                         }
                         isAmoled -> Color(0xFF05070A).copy(alpha = opacity)
+                        // Plus: Liquid Glass keeps the panel itself thin, so the blur shows through.
+                        backdropTheme == BackdropTheme.LIQUID_GLASS -> MaterialTheme.colorScheme.surface.copy(alpha = (opacity * 0.55f).coerceIn(0.18f, 0.6f))
                         else -> MaterialTheme.colorScheme.surface.copy(alpha = opacity)
                     }
                     val isTogether = state.splitGestureMode.isTogether
@@ -684,7 +690,8 @@ fun ShadeRoot(
                                     )
 
                                     state.media?.let { media ->
-                                        PixelMediaCard(
+                                        // Plus: through MediaCard, so Spicy Lyrics' live activity can take its place.
+                                        MediaCard(
                                                 media = media,
                                                 onPlayPause = { viewModel.mediaPlayPause() },
                                                 onSkipNext = { viewModel.mediaSkipNext() },

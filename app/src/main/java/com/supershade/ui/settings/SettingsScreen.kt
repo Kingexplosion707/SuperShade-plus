@@ -1180,6 +1180,9 @@ fun SettingsScreen(
             }
         }
 
+        // Plus: Spicy Lyrics' live activity, the swipe zone and the strict block.
+        com.supershade.plus.PlusSettingsSection(shizukuConnected = shizukuOk)
+
         // =======================================================================
         // 5. APPEARANCE & THEMING
         // =======================================================================

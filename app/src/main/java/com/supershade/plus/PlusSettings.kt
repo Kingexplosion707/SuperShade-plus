@@ -1,0 +1,65 @@
+package com.supershade.plus
+
+import android.content.Context
+import android.content.SharedPreferences
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+
+/**
+ * SuperShade Plus's own settings, kept apart from the original app's so its updates merge
+ * cleanly. Plain preferences: the gesture windows read them synchronously when they're laid out.
+ */
+object PlusSettings {
+    private const val FILE = "supershade_plus"
+
+    const val SPICY_LIVE_ACTIVITY = "spicy_live_activity"
+    const val ZONE_START = "gesture_zone_start"
+    const val ZONE_END = "gesture_zone_end"
+    const val ISLAND_GAP = "gesture_island_gap"
+    const val ZONE_EXTRA_DP = "gesture_zone_extra_dp"
+    const val STRICT_BLOCK = "strict_block_system_shade"
+
+    fun prefs(context: Context): SharedPreferences =
+        context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    /** Spicy Lyrics' live activity in the shade (with Spicy Lyrics Plus installed). */
+    fun spicyLiveActivity(context: Context) = prefs(context).getBoolean(SPICY_LIVE_ACTIVITY, true)
+
+    /** Where across the top the swipe-down zone starts and ends, in percent of the width. */
+    fun zoneStart(context: Context) = prefs(context).getInt(ZONE_START, 0).coerceIn(0, 95)
+    fun zoneEnd(context: Context) = prefs(context).getInt(ZONE_END, 100).coerceIn(5, 100)
+
+    /**
+     * A gap in the zone, in percent of the width, centred on the camera cutout (or the middle):
+     * taps there reach what's under it, such as a dynamic island. 0 leaves no gap.
+     */
+    fun islandGap(context: Context) = prefs(context).getInt(ISLAND_GAP, 0).coerceIn(0, 70)
+
+    /** How far below the status bar the zone reaches, in dp. */
+    fun zoneExtraDp(context: Context) = prefs(context).getInt(ZONE_EXTRA_DP, 20).coerceIn(0, 80)
+
+    /** Shizuku keeps the system's own shade from opening at all, re-asserting it and closing it if it slips open. */
+    fun strictBlock(context: Context) = prefs(context).getBoolean(STRICT_BLOCK, false)
+
+    fun put(context: Context, key: String, value: Any) {
+        prefs(context).edit().apply {
+            when (value) {
+                is Boolean -> putBoolean(key, value)
+                is Int -> putInt(key, value)
+                else -> putString(key, value.toString())
+            }
+        }.apply()
+    }
+
+    /** Emits the key of each change. */
+    fun changes(context: Context): Flow<String?> = callbackFlow {
+        val prefs = prefs(context)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> trySend(key) }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+}
+
+/** The settings that change the swipe zone's layout. */
+val PlusZoneKeys = setOf(PlusSettings.ZONE_START, PlusSettings.ZONE_END, PlusSettings.ISLAND_GAP, PlusSettings.ZONE_EXTRA_DP)

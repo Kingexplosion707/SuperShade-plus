@@ -30,6 +30,8 @@ class GestureOverlay(
 
     private val windowManager = context.getSystemService(WindowManager::class.java)
     private var overlayView: View? = null
+    /** Every window of the zone (Plus: split around a gap, sized by its settings; [com.supershade.plus.GestureZones]). */
+    private var zoneViews: List<View> = emptyList()
 
     private val captureHeight = run {
         val extra = (20 * context.resources.displayMetrics.density).toInt()
@@ -176,19 +178,14 @@ class GestureOverlay(
             }
         }
         overlayView = view
-        try {
-            windowManager.addView(view, params)
-        } catch (_: Exception) {}
+        val wm = windowManager ?: return
+        val statusBarPx = params.height - (20 * context.resources.displayMetrics.density).toInt()
+        zoneViews = com.supershade.plus.GestureZones.addWindows(context, wm, view, params, statusBarPx)
     }
 
     fun detach() {
-        overlayView?.let { view ->
-            try {
-                if (view.isAttachedToWindow) {
-                    windowManager?.removeViewImmediate(view)
-                }
-            } catch (_: Throwable) {}
-        }
+        com.supershade.plus.GestureZones.removeWindows(windowManager, zoneViews)
+        zoneViews = emptyList()
         overlayView = null
     }
 }

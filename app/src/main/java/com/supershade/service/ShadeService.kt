@@ -91,6 +91,28 @@ class ShadeService : Service() {
         )
         gestureOverlay?.attach()
 
+        // Plus: the swipe zone's start, end, depth and island gap lay it out again.
+        com.supershade.plus.PlusSettings.changes(this)
+            .onEach { key ->
+                if (key in com.supershade.plus.PlusZoneKeys) {
+                    gestureOverlay?.detach()
+                    gestureOverlay?.attach()
+                }
+            }
+            .launchIn(scope)
+
+        // Plus: Spicy Lyrics' live activity, asked for while the shade is open.
+        com.supershade.plus.SpicyLink.start(this)
+        shadeViewModel.state
+            .map { it.isOpen }
+            .distinctUntilChanged()
+            .onEach { open -> com.supershade.plus.SpicyLink.shadeOpen(this, open) }
+            .launchIn(scope)
+
+        // Plus: with the strict block on, the system shade's block is re-asserted now and then
+        // and as the screen comes on, in case something lifted it.
+        com.supershade.plus.StrictBlock.start(this, scope) { governor.disableExpansion() }
+
         // Show peek cards for new notifications when the shade panel is closed.
         notificationRepo.newNotifications
             .onEach { notification ->
@@ -167,6 +189,8 @@ class ShadeService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        com.supershade.plus.SpicyLink.stop(this)
+        com.supershade.plus.StrictBlock.stop(this)
         gestureOverlay?.detach()
         gestureOverlay = null
         headsUpOverlay.destroy()

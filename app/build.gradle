@@ -129,6 +129,10 @@ dependencies {
     // Serialization (used by UpdateChecker for GitHub JSON)
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3'
 
+    // Plus: Spicy Lyrics' live activity plays the Canvas and the animated cover
+    implementation 'androidx.media3:media3-exoplayer:1.5.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.5.1'
+
     // Palette (album art dominant color extraction)
     implementation 'androidx.palette:palette-ktx:1.0.0'
 
