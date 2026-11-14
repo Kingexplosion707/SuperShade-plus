@@ -69,6 +69,12 @@ class MediaRepository(private val context: Context) {
     /** Plus: the player's own now-playing screen, and its package, for the live activity's cover. */
     fun sessionActivity(): android.app.PendingIntent? = activeController?.sessionActivity
     fun playerPackage(): String? = activeController?.packageName
+    /** Plus: the player's extra buttons (like, shuffle, repeat) and heart rating, for the live activity. */
+    fun customActions(): List<PlaybackState.CustomAction> = activeController?.playbackState?.customActions.orEmpty()
+    fun sendCustomAction(action: PlaybackState.CustomAction) { activeController?.transportControls?.sendCustomAction(action, null) }
+    fun ratingType(): Int = activeController?.ratingType ?: android.media.Rating.RATING_NONE
+    fun liked(): Boolean? = activeController?.metadata?.getRating(MediaMetadata.METADATA_KEY_USER_RATING)?.takeIf { it.isRated }?.hasHeart()
+    fun setHeart(on: Boolean) { activeController?.transportControls?.setRating(android.media.Rating.newHeartRating(on)) }
 
     fun dispose() {
         activeController?.unregisterCallback(controllerCallback)

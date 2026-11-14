@@ -202,23 +202,35 @@ fun SpicyLiveActivityCard(
                         )
                     }
                 }
+                // Pin the player as the pop-up, kept up after the shade closes (and through song
+                // changes) until let go or swiped away.
+                val popupPinned by PopupPin.pinned.collectAsState()
+                val overlay = org.koin.compose.koinInject<com.supershade.service.HeadsUpOverlay>()
+                HeaderToggle(
+                    on = popupPinned,
+                    icon = if (popupPinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
+                    label = if (popupPinned) "Let the pop-up go" else "Pin as a pop-up",
+                    ink = ink,
+                ) {
+                    if (popupPinned) {
+                        overlay.unpinMedia()
+                    } else {
+                        val playing = shade.state.value.media
+                        if (playing != null) {
+                            overlay.pinMedia(playing, shade::mediaPlayPause, shade::mediaSkipNext, shade::mediaSkipPrevious)
+                            shade.close()
+                        }
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
                 // Float the lyrics out as Spicy Lyrics' overlay, or back.
                 val pinned = live.overlayOn
-                Box(
-                    Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(if (pinned) ink.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.14f))
-                        .clickable { SpicyLink.setOverlay(context, !pinned) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (pinned) Icons.Rounded.PushPin else Icons.Outlined.PushPin,
-                        contentDescription = if (pinned) "Bring the lyrics back" else "Float the lyrics as an overlay",
-                        tint = if (pinned) Color.Black else Color.White,
-                        modifier = Modifier.size(19.dp),
-                    )
-                }
+                HeaderToggle(
+                    on = pinned,
+                    icon = Icons.Rounded.PictureInPictureAlt,
+                    label = if (pinned) "Bring the lyrics back" else "Float the lyrics as an overlay",
+                    ink = ink,
+                ) { SpicyLink.setOverlay(context, !pinned) }
             }
             Spacer(Modifier.height(14.dp))
             // A new song's lyrics (or "Finding the lyrics…" while they come) fade in over the last.
@@ -238,11 +250,19 @@ fun SpicyLiveActivityCard(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // The player's own like / shuffle / repeat around the transport, where it has them.
+                val extras = rememberMediaExtras()
+                val left = extras.filter { it.kind == MediaExtras.Kind.Shuffle }
+                val right = extras.filter { it.kind != MediaExtras.Kind.Shuffle }
+                left.forEach { MediaExtraButton(it, 20.dp, ink) }
+                if (left.isNotEmpty()) Spacer(Modifier.width(8.dp))
                 RoundButton(Icons.Rounded.SkipPrevious, "Previous", 26.dp, onSkipPrevious)
-                Spacer(Modifier.width(22.dp))
+                Spacer(Modifier.width(if (extras.isEmpty()) 22.dp else 14.dp))
                 RoundButton(if (live.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (live.playing) "Pause" else "Play", 34.dp, onPlayPause, filled = true)
-                Spacer(Modifier.width(22.dp))
+                Spacer(Modifier.width(if (extras.isEmpty()) 22.dp else 14.dp))
                 RoundButton(Icons.Rounded.SkipNext, "Next", 26.dp, onSkipNext)
+                if (right.isNotEmpty()) Spacer(Modifier.width(8.dp))
+                right.forEach { MediaExtraButton(it, 20.dp, ink) }
             }
         }
     }
@@ -830,6 +850,14 @@ private fun SpicyPopupCard(
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     PopupLyric(live, ink, inkEnd, Modifier.weight(1f))
+                    // The player's like and shuffle, next to the pins.
+                    val extras = rememberMediaExtras().filter { it.kind != MediaExtras.Kind.Repeat }
+                    if (extras.isNotEmpty()) Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        extras.forEachIndexed { n, button ->
+                            if (n > 0) Spacer(Modifier.height(2.dp))
+                            MediaExtraButton(button, 16.dp, ink, onPressed = onTouch)
+                        }
+                    }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         // Keep the pop-up up (through song changes) until unpinned or swiped away.
                         SmallToggle(
@@ -921,5 +949,19 @@ private fun SmallToggle(on: Boolean, icon: androidx.compose.ui.graphics.vector.I
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, label, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(16.dp))
+    }
+}
+
+@Composable
+private fun HeaderToggle(on: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, ink: Color, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(if (on) ink.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.14f))
+            .clickable(onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = label, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(19.dp))
     }
 }
