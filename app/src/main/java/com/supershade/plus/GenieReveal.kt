@@ -24,7 +24,8 @@ fun Modifier.genieReveal(): Modifier = composed {
     LaunchedEffect(Unit) {
         progress.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 170f))
     }
-    val shader = remember { if (Build.VERSION.SDK_INT >= 33) GenieShader.create() else null }
+    // A shader the device can't compile falls back to the zoom rather than failing the pop-up.
+    val shader = remember { if (Build.VERSION.SDK_INT >= 33) runCatching { GenieShader.create() }.getOrNull() else null }
     graphicsLayer {
         val p = progress.value
         alpha = (p * 3.5f).coerceIn(0f, 1f)
@@ -34,9 +35,11 @@ fun Modifier.genieReveal(): Modifier = composed {
         }
         if (Build.VERSION.SDK_INT >= 33 && shader != null && size.width > 0f && size.height > 0f) {
             val s = shader as RuntimeShader
-            s.setFloatUniform("size", size.width, size.height)
-            s.setFloatUniform("progress", p)
-            renderEffect = RenderEffect.createRuntimeShaderEffect(s, "content").asComposeRenderEffect()
+            renderEffect = runCatching {
+                s.setFloatUniform("size", size.width, size.height)
+                s.setFloatUniform("progress", p)
+                RenderEffect.createRuntimeShaderEffect(s, "content").asComposeRenderEffect()
+            }.getOrNull()
         } else {
             transformOrigin = TransformOrigin(0.5f, 0f)
             val wide = (p * 1.5f).coerceIn(0f, 1f)
@@ -60,8 +63,8 @@ private object GenieShader {
             float drop = (1.0 - t) * size.y;
             float sy = p.y - drop * 0.92;
             if (sy < 0.0) { return half4(0.0); }
-            float out = clamp(p.y / max(size.y, 1.0), 0.0, 1.0);
-            float open = smoothstep(0.0, 1.0, clamp(t * 1.35 + out * 0.55 - 0.25, 0.0, 1.0));
+            float below = clamp(p.y / max(size.y, 1.0), 0.0, 1.0);
+            float open = smoothstep(0.0, 1.0, clamp(t * 1.35 + below * 0.55 - 0.25, 0.0, 1.0));
             float width = mix(0.07, 1.0, open);
             float cx = size.x * 0.5;
             float sx = cx + (p.x - cx) / width;
