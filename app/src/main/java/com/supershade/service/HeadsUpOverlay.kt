@@ -239,7 +239,9 @@ class HeadsUpOverlay(
                                 notification = notification,
                                 isAmoled = isAmoled,
                                 onTap = {
-                                    try { notification.contentIntent?.send() } catch (_: Exception) {}
+                                    if (com.supershade.plus.PendingLaunch.send(context, notification.contentIntent, fallbackPackage = notification.packageName)) {
+                                        notificationRepo?.autoCancelAfterLaunch(notification.key)
+                                    }
                                     handler.post { dismissCurrent() }
                                 },
                                 onHide = {
@@ -835,7 +837,7 @@ class HeadsUpOverlay(
                                             if (action.replyInput != null) {
                                                 replyingAction = action
                                             } else {
-                                                try { action.pendingIntent?.send() } catch (_: Exception) {}
+                                                com.supershade.plus.PendingLaunch.send(ctx, action.pendingIntent)
                                                 onHide()
                                             }
                                         },
@@ -908,7 +910,7 @@ class HeadsUpOverlay(
                                             arrayOf(ri), intent,
                                             Bundle().apply { putCharSequence(ri.resultKey, replyText) }
                                         )
-                                        try { action.pendingIntent?.send(ctx, 0, intent) } catch (_: Exception) {}
+                                        com.supershade.plus.PendingLaunch.send(ctx, action.pendingIntent, intent)
                                         onHide()
                                     },
                                     enabled = replyText.isNotBlank(),
