@@ -238,11 +238,19 @@ fun SpicyLiveActivityCard(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // The player's own like / shuffle / repeat around the transport, where it has them.
+                val extras = rememberMediaExtras()
+                val left = extras.filter { it.kind == MediaExtras.Kind.Shuffle }
+                val right = extras.filter { it.kind != MediaExtras.Kind.Shuffle }
+                left.forEach { MediaExtraButton(it, 20.dp, ink) }
+                if (left.isNotEmpty()) Spacer(Modifier.width(8.dp))
                 RoundButton(Icons.Rounded.SkipPrevious, "Previous", 26.dp, onSkipPrevious)
-                Spacer(Modifier.width(22.dp))
+                Spacer(Modifier.width(if (extras.isEmpty()) 22.dp else 14.dp))
                 RoundButton(if (live.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (live.playing) "Pause" else "Play", 34.dp, onPlayPause, filled = true)
-                Spacer(Modifier.width(22.dp))
+                Spacer(Modifier.width(if (extras.isEmpty()) 22.dp else 14.dp))
                 RoundButton(Icons.Rounded.SkipNext, "Next", 26.dp, onSkipNext)
+                if (right.isNotEmpty()) Spacer(Modifier.width(8.dp))
+                right.forEach { MediaExtraButton(it, 20.dp, ink) }
             }
         }
     }
@@ -830,6 +838,14 @@ private fun SpicyPopupCard(
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     PopupLyric(live, ink, inkEnd, Modifier.weight(1f))
+                    // The player's like and shuffle, next to the pins.
+                    val extras = rememberMediaExtras().filter { it.kind != MediaExtras.Kind.Repeat }
+                    if (extras.isNotEmpty()) Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        extras.forEachIndexed { n, button ->
+                            if (n > 0) Spacer(Modifier.height(2.dp))
+                            MediaExtraButton(button, 16.dp, ink, onPressed = onTouch)
+                        }
+                    }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         // Keep the pop-up up (through song changes) until unpinned or swiped away.
                         SmallToggle(
